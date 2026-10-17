@@ -229,21 +229,67 @@ def extract_listing(text: str) -> Extracted:
 
 # ---------- Explanations (Gemini writes words about a decision our code already made) ----------
 
+EXPLAIN_PROMPT = """Explain this apartment decision to a group of roommates in 2 or 3 short sentences.
+
+How the decision was made (never contradict this):
+- Each roommate scored every listing from 0 to 100 using their own priorities.
+- The fair pick is the listing where the LEAST happy roommate scores highest (its "min" score is the
+  highest of all listings). It is NOT chosen for the highest average; never say it was.
+- "least_happy" is the roommate who gives up the most at the pick; "reasons" are what cost them points.
+
+Rules: use only facts and numbers that appear in the data below, written the same way (you may round
+dollars to whole numbers). Name the pick, say why it is fair in those terms, and say who gives up
+the most and on what. Talk like a friend in the group chat: everyday words, no jargon such as
+"min score", "maximin" or "criterion" (say "even the least happy of you still gets 69.7 here, more than
+anywhere else"). No lists, no headings.
+
+Data:
+"""
+
+
+def _numbers(text: str) -> list[float]:
+    return [float(n) for n in re.findall(r"\d+(?:\.\d+)?", text.replace(",", ""))]
+
+
+def numbers_are_from_decision(text: str, decision: dict) -> bool:
+    """True if every number in Gemini's text appears in the decision our code made."""
+    allowed = {100.0, float(len((decision.get("pick") or {}).get("scores") or []))}
+    for n in _numbers(json.dumps(decision)):
+        allowed |= {n, float(round(n)), round(n, 1)}
+    return all(n in allowed for n in _numbers(text))
+
+
+def template_explanation(decision: dict) -> str:
+    """Plain sentence written by our code, used if Gemini's text fails the number check."""
+    pick = (decision.get("pick") or {}).get("title", "The pick")
+    lh = decision.get("least_happy") or {}
+    text = (f"{pick} is the fairest pick: its least happy roommate, {lh.get('roommate', 'someone')}, "
+            f"scores {lh.get('score')} out of 100, higher than the least happy roommate at any other listing.")
+    reasons = lh.get("reasons") or []
+    if reasons:
+        parts = [f"{r['criterion']} ({r['raw_value']}, -{r['points_lost']} points)" for r in reasons]
+        text += f" {lh.get('roommate')} gives up the most on " + " and ".join(parts) + "."
+    return text
+
+
 def explain_decision(decision: dict) -> str:
-    prompt = (
-        "Explain this apartment decision to a group of student roommates in 3 short sentences. "
-        "Use only the numbers given. Say which place was picked, why it is fair, and who gives up "
-        "the most and on what.\n\n" + json.dumps(decision, sort_keys=True)
-    )
+    """Gemini writes the words; our code checks every number against the decision first.
+
+    A reply with a number that isn't in the decision is retried once, then replaced by
+    template_explanation. Good replies are cached.
+    """
+    prompt = EXPLAIN_PROMPT + json.dumps(decision, sort_keys=True)
     key = f"{_model()}|{prompt}"
     cached = cache.get("explain", key)
     if cached is not None:
         return cached
-    response = _client().models.generate_content(model=_model(), contents=prompt)
-    text = (response.text or "").strip()
-    if text:
-        cache.put("explain", key, text)
-    return text
+    for _attempt in range(2):
+        response = _client().models.generate_content(model=_model(), contents=prompt)
+        text = (response.text or "").strip()
+        if text and numbers_are_from_decision(text, decision):
+            cache.put("explain", key, text)
+            return text
+    return template_explanation(decision)
 
 
 if __name__ == "__main__":

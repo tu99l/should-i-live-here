@@ -173,3 +173,43 @@ def test_explanation_is_cached(monkeypatch):
     assert extract.explain_decision(decision) == "Pick A."
     assert extract.explain_decision(decision) == "Pick A."
     assert len(calls) == 1
+
+
+DECISION = {
+    "pick": {"title": "424 Landfair Ave", "scores": [{"roommate": "Alex", "score": 79.7}, {"roommate": "Sam", "score": 69.7}]},
+    "least_happy": {"roommate": "Sam", "score": 69.7, "gives_up_most_on": "parking",
+                    "reasons": [{"criterion": "parking", "raw_value": "paid", "points_lost": 11.8}]},
+    "ranking": [{"title": "424 Landfair Ave", "min": 69.7, "avg": 74.7}],
+}
+
+
+def fake_explainer(monkeypatch, replies):
+    calls = []
+
+    class FakeModels:
+        def generate_content(self, model, contents):
+            calls.append(contents)
+            return type("R", (), {"text": replies[len(calls) - 1]})()
+
+    monkeypatch.setattr(extract, "_client", lambda: type("C", (), {"models": FakeModels()})())
+    return calls
+
+
+def test_explanation_numbers_must_come_from_the_decision():
+    assert extract.numbers_are_from_decision("Sam scores 69.7 and loses 11.8 points on parking.", DECISION)
+    assert extract.numbers_are_from_decision("Sam scores 70 out of 100.", DECISION)  # Rounding is fine.
+    assert not extract.numbers_are_from_decision("It saves everyone $300 a month.", DECISION)
+
+
+def test_invented_number_is_retried_then_replaced_by_our_sentence(monkeypatch):
+    calls = fake_explainer(monkeypatch, ["Rent is only $900!", "Average of 88."])
+    text = extract.explain_decision(DECISION)
+    assert len(calls) == 2
+    assert text.startswith("424 Landfair Ave is the fairest pick")
+    assert "parking (paid, -11.8 points)" in text
+
+
+def test_good_explanation_on_retry_is_used(monkeypatch):
+    calls = fake_explainer(monkeypatch, ["Rent is only $900!", "Sam scores 69.7, the best worst case."])
+    assert extract.explain_decision(DECISION) == "Sam scores 69.7, the best worst case."
+    assert len(calls) == 2
