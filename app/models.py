@@ -17,6 +17,8 @@ class ListingFacts(BaseModel):
 
     address: Optional[str] = None
     rent_total_monthly: Optional[float] = Field(None, description="Monthly rent for the whole unit, US dollars")
+    rent_per_person_listed: Optional[float] = Field(
+        None, description="Monthly price the listing states per bed or per room (each person pays this)")
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     laundry: Laundry = "unknown"

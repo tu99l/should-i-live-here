@@ -22,12 +22,12 @@ from .models import Laundry, ListingFacts, Parking
 
 # Fields that need an evidence quote when they have a value.
 FACT_FIELDS = [
-    "address", "rent_total_monthly", "bedrooms", "bathrooms",
+    "address", "rent_total_monthly", "rent_per_person_listed", "bedrooms", "bathrooms",
     "laundry", "parking", "utilities_included", "available_from",
 ]
 
 # Bump this when the prompt changes, so old cached replies are not reused.
-PROMPT_VERSION = "extract-v2"
+PROMPT_VERSION = "extract-v3"
 
 EXTRACT_PROMPT = """You extract facts from a rental listing for students. Return JSON only.
 
@@ -35,7 +35,10 @@ Rules:
 - Use only facts stated in the listing text. If a fact is not stated, use null (or "unknown").
 - Never estimate or fill in anything from general knowledge.
 - rent_total_monthly: the monthly rent for the WHOLE unit in US dollars. If the price is only
-  per bed or per room, use null.
+  per bed or per room, use null here.
+- rent_per_person_listed: if the listing states a monthly price PER BED, PER ROOM or PER PERSON
+  (e.g. "$1,150/bed", "private room $1,400"), that amount. Else null. Never divide or multiply
+  any price yourself.
 - laundry: "in_unit" (washer/dryer inside the unit), "shared" (building or coin laundry),
   "none" (listing says no laundry), else "unknown". Hookups without machines are "unknown".
 - parking: "included", "paid" (extra monthly cost), "none", else "unknown".
@@ -54,6 +57,7 @@ class Evidence(BaseModel):
 
     address: Optional[str] = None
     rent_total_monthly: Optional[str] = None
+    rent_per_person_listed: Optional[str] = None
     bedrooms: Optional[str] = None
     bathrooms: Optional[str] = None
     laundry: Optional[str] = None
@@ -67,6 +71,7 @@ class GeminiReply(BaseModel):
 
     address: Optional[str] = None
     rent_total_monthly: Optional[float] = Field(None, ge=0)
+    rent_per_person_listed: Optional[float] = Field(None, ge=0)
     bedrooms: Optional[int] = Field(None, ge=0)
     bathrooms: Optional[float] = Field(None, ge=0)
     laundry: Laundry = "unknown"
@@ -108,7 +113,7 @@ def _numbers_in(quote: str) -> list[float]:
 def value_matches_quote(field: str, value, quote: str) -> bool:
     """For numbers, the quote must actually contain that number. Catches made-up values."""
     q = _normalize(quote)
-    if field == "rent_total_monthly":
+    if field in ("rent_total_monthly", "rent_per_person_listed"):
         return float(value) in _numbers_in(q)
     if field in ("bedrooms", "bathrooms"):
         if float(value) in _numbers_in(q):

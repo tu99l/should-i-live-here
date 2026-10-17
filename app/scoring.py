@@ -33,10 +33,16 @@ def _linear(value: float, best: float, worst: float) -> float:
 
 
 def rent_per_person(listing: Listing, group_size: int) -> Optional[float]:
-    """Whole-unit rent split evenly. The group size comes from the user, never the model."""
-    if listing.rent_total_monthly is None:
-        return None
-    return round(listing.rent_total_monthly / max(group_size, 1), 2)
+    """What each roommate pays per month.
+
+    Whole-unit rent is split evenly (group size comes from the user, never the model).
+    If the listing only states a per-bed or per-room price, each person pays that price.
+    """
+    if listing.rent_total_monthly is not None:
+        return round(listing.rent_total_monthly / max(group_size, 1), 2)
+    if listing.rent_per_person_listed is not None:
+        return listing.rent_per_person_listed
+    return None
 
 
 def criterion_scores(listing: Listing, roommate: Roommate, group_size: int,

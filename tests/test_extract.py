@@ -68,7 +68,7 @@ def test_good_reply_keeps_every_fact():
     assert e.laundry == "in_unit" and e.parking == "paid"
     assert e.utilities_included is True
     assert e.available_from == "2027-08-15"
-    assert set(e.evidence) == set(extract.FACT_FIELDS)
+    assert set(e.evidence) == set(extract.FACT_FIELDS) - {"rent_per_person_listed"}  # Whole unit only.
     assert e.rejected == []
 
 
@@ -213,3 +213,21 @@ def test_good_explanation_on_retry_is_used(monkeypatch):
     calls = fake_explainer(monkeypatch, ["Rent is only $900!", "Sam scores 69.7, the best worst case."])
     assert extract.explain_decision(DECISION) == "Sam scores 69.7, the best worst case."
     assert len(calls) == 2
+
+
+PER_BED = """Shared room near campus (made up for testing). $1,150/bed per month, 2 beds in the room.
+3 bed / 1 bath apartment. Utilities included."""
+
+
+def test_per_bed_price_is_kept_as_per_person_not_total():
+    raw = json.dumps({"rent_total_monthly": None, "rent_per_person_listed": 1150, "bedrooms": 3,
+                      "evidence": {"rent_per_person_listed": "$1,150/bed per month", "bedrooms": "3 bed"}})
+    e = extract.validate_reply(raw, PER_BED)
+    assert e.rent_per_person_listed == 1150 and e.rent_total_monthly is None
+
+
+def test_per_bed_price_made_up_by_dividing_is_rejected():
+    # Gemini must not do math: $1,150 x 3 = $3,450 is not in the quote, so it is thrown out.
+    raw = json.dumps({"rent_total_monthly": 3450, "evidence": {"rent_total_monthly": "$1,150/bed per month"}})
+    e = extract.validate_reply(raw, PER_BED)
+    assert e.rent_total_monthly is None and "rent_total_monthly" in e.rejected

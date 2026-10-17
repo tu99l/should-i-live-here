@@ -97,3 +97,10 @@ def test_every_demo_listing_scores():
     for d in data:
         r = score_listing(Listing(**d), roommate, 3)
         assert r["score"] is None or 0 <= r["score"] <= 100
+
+
+def test_per_bed_price_is_what_each_person_pays():
+    per_bed = make_listing(rent_total_monthly=None, rent_per_person_listed=1150)
+    assert rent_per_person(per_bed, 3) == 1150  # Not divided: each person pays the listed price.
+    both = make_listing(rent_total_monthly=3000, rent_per_person_listed=1150)
+    assert rent_per_person(both, 2) == 1500  # A whole-unit price wins when both are stated.

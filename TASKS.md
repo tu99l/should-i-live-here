@@ -57,6 +57,11 @@ Each roommate can now say where they need to get to and how. The backend looks u
 - Tell users to type a specific place ("Santa Monica Pier"), not just "the beach"; Google routes to whatever it thinks that text means.
 - Demo moment (tested live): with the default roommates, setting Sam to "Santa Monica Pier, Santa Monica, CA" by bike moves the pick from 424 Landfair to 1824 Fairburn, and Alex becomes least happy (rent $1,517 each, 43 min walk to campus).
 
+## For Tu: per-bed and per-room prices (new field)
+- Listings can now have `rent_per_person_listed`: a price the listing states per bed or per room ("$1,150/bed"). Each person pays that amount; it is not split.
+- In `static/app.js`, `rentPerPerson()` still checks the old `price`/`price_type`, which no longer exist. Change it to: `rent_total_monthly / roommates` if set, else `rent_per_person_listed`, else unknown. (Or use `rent_per_person` from each `/api/decide` ranking row, which already does this.)
+- Card idea: "$1,150/person (listed per bed)" so users see why it isn't split.
+
 ## Missing inputs
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
