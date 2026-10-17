@@ -18,3 +18,9 @@ data/cache.json
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# On-disk API cache from the brief (cache/)
+cache/
+
+# Personal Claude Code notes (who you are, private preferences)
+CLAUDE.local.md

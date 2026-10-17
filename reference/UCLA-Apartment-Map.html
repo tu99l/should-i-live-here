@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UCLA Apartment Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+  .banner {
+    position: absolute; top: 12px; left: 12px; z-index: 1000;
+    background: #fff; padding: 10px 14px; border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.18); max-width: 300px;
+  }
+  .banner h1 { font-size: 15px; margin: 0 0 3px; color: #2b5fa3; }
+  .banner p { font-size: 11.5px; margin: 0; color: #52606d; line-height: 1.4; }
+  /* Tooltip detail card (hover) */
+  .leaflet-tooltip.apt-tip {
+    background: #fff; border: none; border-top: 4px solid #888; border-radius: 8px;
+    box-shadow: 0 3px 14px rgba(0,0,0,.22); padding: 10px 12px; max-width: 260px;
+    white-space: normal; opacity: 1;
+  }
+  .leaflet-tooltip.apt-tip:before { display: none; }
+  .tip-name { font-size: 13.5px; font-weight: 700; color: #14365e; margin-bottom: 2px; }
+  .tip-price { font-size: 12.5px; color: #2b5fa3; margin-bottom: 6px; }
+  .tip-price b { font-size: 14px; }
+  .tip-row { font-size: 11.5px; color: #323f4b; margin: 2px 0; }
+  .tip-row .lab { display: inline-block; width: 16px; }
+  .tip-pro { font-size: 11px; color: #1a7a4c; margin-top: 6px; }
+  .tip-con { font-size: 11px; color: #b54708; margin-top: 2px; }
+  .tip-hint { font-size: 10px; color: #9aa5b1; margin-top: 6px; font-style: italic; }
+  /* Popup */
+  .pop-btn {
+    display: inline-block; margin-top: 8px; background: #2b5fa3; color: #fff;
+    padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;
+  }
+  .legend {
+    background: #fff; padding: 9px 11px; border-radius: 8px; line-height: 1.7;
+    box-shadow: 0 2px 8px rgba(0,0,0,.18); font-size: 11.5px; color: #323f4b;
+  }
+  .legend b { display:block; margin-bottom:3px; color:#14365e; font-size:11px; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+         margin-right: 6px; border: 2px solid #fff; box-shadow: 0 0 0 1px #aaa; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="banner">
+  <h1>UCLA 3BR Apartment Map</h1>
+  <p>Hover a marker for details · click it for the Zillow link. Dashed circle ≈ a 35-min walk from campus.</p>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const UCLA = [34.0699182, -118.4438495];
+
+const C = { green:'#2e9e5b', blue:'#2b7fd4', orange:'#e8893b', gray:'#8a94a6' };
+
+const apts = [
+  { n:"424 Landfair Ave", lat:34.0699187, lng:-118.4523682, c:C.green,
+    pp:"$1,083", tot:"$3,250/mo (3/1 unit; 1.5ba units $4,145+)", bdba:"3 bd / 1 ba",
+    walk:"~10 min walk", laun:"Shared coin (not in-unit)", park:"+$100, 1 space", avail:"Jul–Sep",
+    pro:"Cheapest; closest walk; water + trash incl.", con:"Shared coin laundry; 1 bath; no A/C",
+    url:"https://www.zillow.com/homedetails/424-Landfair-Ave-Los-Angeles-CA-90024/443758759_zpid/" },
+
+  { n:"1418 S Bentley Ave #203", lat:34.0516149, lng:-118.4460849, c:C.green,
+    pp:"$1,142", tot:"$3,425/mo", bdba:"3 bd / 2.5 ba · 2-story condo",
+    walk:"~40 min walk / ~10 min bike", laun:"Common-area (not in-unit)", park:"Currently unavailable (!)", avail:"Now",
+    pro:"Cheap; 2-story layout; landlord pays water/trash", con:"No parking now; no in-unit laundry; window A/C; no pets",
+    url:"https://www.zillow.com/homedetails/1418-S-Bentley-Ave-APT-203-Los-Angeles-CA-90025/2117019336_zpid/" },
+
+  { n:"11685 Gorham Ave #4", lat:34.0545752, lng:-118.4660058, c:C.green,
+    pp:"$1,200", tot:"$3,600/mo", bdba:"3 bd / 2 ba · 1,400 sqft · Brentwood",
+    walk:"~50 min walk / ~15 min bike", laun:"In-unit hookups (supply own)", park:"2 spots incl.", avail:"Now (confirm fall)",
+    pro:"Cheap; 2 parking; owner pays water; nice area", con:"Bike distance; available now; hookups not installed",
+    url:"https://www.zillow.com/homedetails/11685-Gorham-Ave-APT-4-Los-Angeles-CA-90049/2082019560_zpid/" },
+
+  { n:"Manning Ave #203", lat:34.0506183, lng:-118.42907, c:C.blue,
+    pp:"~$1,404", tot:"$4,595/mo (~$4,212 w/ 1 mo free)", bdba:"3 bd / 2 ba · 1,745 sqft",
+    walk:"~46 min walk / ~12 min bike", laun:"Installed in-unit (select units)", park:"Covered, gated", avail:"Aug 5",
+    pro:"Installed W/D + central A/C; fits fall; free month; big; pets OK", con:"Just past 35-min walk; confirm W/D in this unit",
+    url:"https://www.zillow.com/apartments/los-angeles-ca/manning-avenue/CrQMp4/" },
+
+  { n:"1824 Fairburn Ave", lat:34.0543318, lng:-118.4267337, c:C.blue,
+    pp:"$1,517", tot:"$4,550/mo", bdba:"3 bd / 2 ba · 1,500 sqft",
+    walk:"~30 min walk / ~8 min bike", laun:"Installed in-unit ✓", park:"Off-street", avail:"Now (confirm fall)",
+    pro:"Installed laundry; walkable; pets OK; roomy", con:"A bit over ideal; available now; confirm A/C & parking",
+    url:"https://www.zillow.com/homedetails/1824-Fairburn-Ave-Los-Angeles-CA-90025/2099256460_zpid/" },
+
+  { n:"1615 Greenfield Ave (Unit 9)", lat:34.0501442, lng:-118.4429169, c:C.blue,
+    pp:"~$1,532", tot:"$4,795/mo (~$4,595 w/ ½ mo free)", bdba:"3 bd / 2.5 ba",
+    walk:"~34 min walk / ~9 min bike", laun:"Installed in-unit ✓", park:"Garage + 2", avail:"Jul 3",
+    pro:"Installed W/D + central A/C + garage; luxury finishes; pets OK", con:"Edge of 35-min walk; a bit over ideal",
+    url:"https://www.zillow.com/apartments/los-angeles-ca/1615-greenfield-ave/CpbWm5/" },
+
+  { n:"10623 Kinnard Ave", lat:34.056152, lng:-118.4322004, c:C.blue,
+    pp:"$1,532", tot:"$4,595/mo", bdba:"3 bd / 2 ba · 1,600 sqft",
+    walk:"~18 min walk", laun:"Not listed — confirm", park:"Confirm", avail:"Confirm",
+    pro:"Close walk; spacious", con:"Listing light on details — confirm laundry/parking/A/C",
+    url:"https://www.zillow.com/homedetails/10623-Kinnard-Ave-10623-Los-Angeles-CA-90024/462984335_zpid/" },
+
+  { n:"Sterling Wilshire", lat:34.0610234, lng:-118.4366242, c:C.orange,
+    pp:"$1,580", tot:"$4,740–4,780/mo", bdba:"3 bd / 2 ba",
+    walk:"~20 min walk", laun:"Shared + hookups (not installed)", park:"Valet / covered", avail:"Now",
+    pro:"Walkable; central A/C; valet parking; gym; remodeled", con:"Pricey; laundry shared/hookups; available now",
+    url:"https://www.zillow.com/apartments/los-angeles-ca/sterling-wilshire/5XjLBN/" },
+
+  { n:"1655 Selby Ave #101", lat:34.0531018, lng:-118.4364119, c:C.orange,
+    pp:"$1,583", tot:"$4,750/mo", bdba:"3 bd / 3 ba · 1,676 sqft condo",
+    walk:"~28 min walk", laun:"Likely in-unit (confirm)", park:"Confirm", avail:"Confirm",
+    pro:"Private bath each (3 baths!); large; walkable", con:"Pricey; amenities need confirming",
+    url:"https://www.zillow.com/homedetails/1655-Selby-Ave-APT-101-Los-Angeles-CA-90024/20505276_zpid/" },
+
+  { n:"547 Landfair Ave #547", lat:34.067316, lng:-118.45024, c:C.orange,
+    pp:"$1,600", tot:"$4,800/mo", bdba:"3 bd / 2 ba · 1,600 sqft",
+    walk:"~10 min walk", laun:"Shared (not in-unit)", park:"Off-street, 2–3 cars", avail:"Aug 15",
+    pro:"Closest walk; big; water + trash paid; fits 3 cars", con:"Pricey; shared laundry; no A/C; carpet",
+    url:"https://www.zillow.com/homedetails/547-Landfair-Ave-547-Los-Angeles-CA-90024/462396916_zpid/" },
+
+  { n:"10620 Eastborne Ave #202", lat:34.0540875, lng:-118.4305449, c:C.orange,
+    pp:"$1,650", tot:"$4,950/mo", bdba:"3 bd / 2 ba · 1,788 sqft (largest)",
+    walk:"~18 min walk", laun:"Not listed — confirm", park:"Confirm", avail:"Confirm",
+    pro:"Close walk; very spacious", con:"Most expensive; confirm all amenities",
+    url:"https://www.zillow.com/homedetails/10620-Eastborne-Ave-APT-202-Los-Angeles-CA-90024/20507128_zpid/" },
+
+  { n:"1375 Midvale Apartments", lat:34.0554199, lng:-118.4435639, c:C.gray,
+    pp:"TBD — ask", tot:"3BR price not posted (2BR is $3,395)", bdba:"3 bd / 2 ba",
+    walk:"~14 min walk", laun:"Hookups (supply own)", park:"3 spots, garage", avail:"Confirm",
+    pro:"Very close; 3 parking; utilities incl; gym + rooftop; central A/C", con:"3BR price not listed; hookups only; no pets",
+    url:"https://www.zillow.com/apartments/los-angeles-ca/1375-midvale-apartments/5bJV46/" }
+];
+
+const map = L.map('map', { scrollWheelZoom: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 20
+}).addTo(map);
+
+// 35-min walk radius (~1.75 mi = 2816 m)
+L.circle(UCLA, { radius: 2816, color:'#2b5fa3', weight:1.5, dashArray:'6 6',
+  fill:true, fillColor:'#2b5fa3', fillOpacity:0.05 }).addTo(map);
+
+// UCLA marker
+L.marker(UCLA, {
+  icon: L.divIcon({ className:'', html:
+    '<div style="background:#ffd100;border:2px solid #2774ae;color:#2774ae;font-weight:700;'+
+    'font-size:11px;padding:3px 7px;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.3);white-space:nowrap;">UCLA</div>',
+    iconSize:[50,22], iconAnchor:[25,11] })
+}).addTo(map).bindTooltip("UCLA — campus center", {direction:'top'});
+
+function card(a, withLink) {
+  return `<div class="tip-name">${a.n}</div>
+    <div class="tip-price"><b>${a.pp}</b>/person &middot; ${a.tot}</div>
+    <div class="tip-row"><span class="lab">🏠</span>${a.bdba}</div>
+    <div class="tip-row"><span class="lab">🚶</span>${a.walk}</div>
+    <div class="tip-row"><span class="lab">🧺</span>${a.laun}</div>
+    <div class="tip-row"><span class="lab">🅿️</span>${a.park}</div>
+    <div class="tip-row"><span class="lab">📅</span>Move-in: ${a.avail}</div>
+    <div class="tip-pro">＋ ${a.pro}</div>
+    <div class="tip-con">－ ${a.con}</div>
+    ${ withLink ? `<a class="pop-btn" href="${a.url}" target="_blank" rel="noopener">View on Zillow →</a>`
+                : `<div class="tip-hint">Click marker for the Zillow link →</div>` }`;
+}
+
+const bounds = [UCLA];
+apts.forEach(a => {
+  const m = L.circleMarker([a.lat, a.lng], {
+    radius: 9, color:'#fff', weight:2, fillColor:a.c, fillOpacity:0.95
+  }).addTo(map);
+  m.bindTooltip(`<div class="card-inner" style="--c:${a.c}">${card(a,false)}</div>`,
+    { className:'apt-tip', sticky:true, direction:'top', offset:[0,-4] });
+  // colored top border per tier
+  m.on('tooltipopen', e => { e.tooltip._container.style.borderTopColor = a.c; });
+  m.bindPopup(card(a,true), { maxWidth: 270 });
+  bounds.push([a.lat, a.lng]);
+});
+
+map.fitBounds(bounds, { padding:[60,60] });
+
+// Legend
+const legend = L.control({ position:'bottomright' });
+legend.onAdd = function() {
+  const d = L.DomUtil.create('div','legend');
+  d.innerHTML =
+    '<b>Per-person rent</b>'+
+    '<span class="dot" style="background:'+C.green+'"></span>≤ $1,300<br>'+
+    '<span class="dot" style="background:'+C.blue+'"></span>$1,400–$1,550<br>'+
+    '<span class="dot" style="background:'+C.orange+'"></span>$1,580+<br>'+
+    '<span class="dot" style="background:'+C.gray+'"></span>Price TBD<br>'+
+    '<span style="display:inline-block;width:11px;border-top:2px dashed #2b5fa3;margin-right:6px;vertical-align:middle;"></span>~35-min walk';
+  return d;
+};
+legend.addTo(map);
+</script>
+</body>
+</html>
