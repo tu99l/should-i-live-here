@@ -6,7 +6,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | # | Step | Owner | Target | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Repo, `.env`, `.gitignore`, CLAUDE.md; both can run the app locally | Both | 2:30 PM | Freddy: done. Teammate: todo |
-| 2 | `extract.py`: pasted text to validated JSON with evidence quotes | Freddy | 4:00 PM | todo |
+| 2 | `extract.py`: pasted text to validated JSON with evidence quotes | Freddy | 4:00 PM | doing: code + tests done; needs real key + 3 samples to verify |
 | 3 | `scoring.py`: weights sum to 1, breakdown, unknowns excluded, tests | Freddy | 5:00 PM | todo |
 | 4 | `maps_lookup.py`: walk/bike time + groceries, cached, billing cap set | Freddy | 6:00 PM | todo |
 | 5 | Map UI from `reference/UCLA-Apartment-Map.html`, demo listings load | Teammate | 5:00 PM | todo |
@@ -21,7 +21,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 
 ## Code that must change to match the brief
 The starter code was written before the brief, so it uses different names. Fix these as part of steps 2 to 6:
-- `app/parser.py` becomes `app/extract.py`, with the brief's schema (`rent_total_monthly`, `utilities_included`, `available_from`, `evidence`).
+- Done: `app/parser.py` is now `app/extract.py` with the brief's schema. `/api/parse` still returns the old Listing shape (via `to_listing_fields`) plus a new `evidence` field, until step 3.
 - `app/commute.py` becomes `app/maps_lookup.py`, caching into `cache/` instead of `data/cache.json`.
 - The group pick moves out of `app/scoring.py` into `app/group.py`.
 - `app/models.py`: laundry `in_unit | shared | none | unknown`, parking `included | paid | none | unknown`.

@@ -34,6 +34,7 @@ class Listing(ListingFields):
     walk_minutes: Optional[float] = None
     bike_minutes: Optional[float] = None
     grocery_walk_minutes: Optional[float] = None
+    evidence: dict[str, str] = Field(default_factory=dict, description="Exact quote from the listing for each extracted fact")
 
 
 class Weights(BaseModel):
