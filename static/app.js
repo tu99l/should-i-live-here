@@ -5,7 +5,8 @@
 const CAMPUS = { name: "UCLA", latlng: [34.0699182, -118.4438495] };
 const WALK_CIRCLE_MINUTES = 35;
 const WALK_METERS_PER_MINUTE = 80; // ~3 mph, so 35 min is about 2.8 km (1.75 mi), as in the earlier map
-const FACTORS = ["rent", "walk", "laundry", "parking", "grocery"];
+// Must match CRITERIA in app/scoring.py.
+const FACTORS = ["rent", "commute", "laundry", "parking", "bedrooms"];
 
 // Per-person rent tiers for marker colors (upper bound in dollars, inclusive).
 const TIERS = [
@@ -23,9 +24,9 @@ const LABELS = {
 
 let listings = [];
 let roommates = [
-  { name: "Alex", budget: 1500, weights: { rent: 5, walk: 2, laundry: 3, parking: 1, grocery: 2 } },
-  { name: "Sam", budget: 1900, weights: { rent: 2, walk: 5, laundry: 3, parking: 4, grocery: 3 } },
-  { name: "Jordan", budget: 1700, weights: { rent: 3, walk: 3, laundry: 5, parking: 2, grocery: 3 } },
+  { name: "Alex", budget: 1500, weights: { rent: 5, commute: 2, laundry: 3, parking: 1, bedrooms: 2 } },
+  { name: "Sam", budget: 1900, weights: { rent: 2, commute: 5, laundry: 3, parking: 4, bedrooms: 3 } },
+  { name: "Jordan", budget: 1700, weights: { rent: 3, commute: 3, laundry: 5, parking: 2, bedrooms: 3 } },
 ];
 let markers = {};
 let lastDecision = null;
@@ -187,7 +188,7 @@ function roommatesChanged() {
 
 function addRoommate() {
   roommates.push({ name: "Roommate " + (roommates.length + 1), budget: 1500,
-                   weights: { rent: 3, walk: 3, laundry: 3, parking: 3, grocery: 3 } });
+                   weights: { rent: 3, commute: 3, laundry: 3, parking: 3, bedrooms: 3 } });
   roommatesChanged();
 }
 
