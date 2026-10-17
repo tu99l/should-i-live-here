@@ -4,28 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Should I Live Here?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nunito:wght@800&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <div id="map"></div>
   <aside>
-    <h1>Should I Live Here?</h1>
-    <div class="muted">Each roommate sets what matters. We pick the place that's fairest for everyone.
-      Hover a marker for details, or tap it on a phone.</div>
+    <header class="brand">
+      <h1>Should I Live Here?</h1>
+      <p>Every roommate says what matters. We find the place that's fairest for the whole group, and show the math.</p>
+    </header>
 
-    <h2>Roommates</h2>
-    <div id="roommates"></div>
-    <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
+    <section>
+      <h2><span class="step">1</span>Who's moving in?</h2>
+      <p class="hint">Set each person's max rent and how much each thing matters to them (0 = don't care, 5 = deal-breaker).</p>
+      <div id="roommates"></div>
+      <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
+    </section>
 
-    <h2>Decide</h2>
-    <button onclick="runDecision()">Find the fairest pick</button>
-    <div id="result" style="margin-top:10px"></div>
+    <section>
+      <h2><span class="step">2</span>Find the fairest pick</h2>
+      <p class="hint">We score every place for every roommate, then pick the one where the least happy person is happiest.</p>
+      <button class="primary" id="decideBtn" onclick="runDecision()">Find the fairest pick</button>
+      <div id="result"><div class="empty">No pick yet. Set everyone's priorities, then press the button.</div></div>
+    </section>
 
-    <h2>Add a listing</h2>
-    <textarea id="paste" placeholder="Paste listing text here"></textarea>
-    <button class="secondary" onclick="parseListing()">Read listing</button>
-    <div id="parseStatus" class="muted"></div>
+    <section>
+      <h2><span class="step">3</span>Add a listing</h2>
+      <p class="hint">Paste the text of any listing. We pull out the facts and look up real walk times and groceries.</p>
+      <textarea id="paste" placeholder="Paste listing text here, e.g. from Zillow or Craigslist"></textarea>
+      <button class="secondary" id="parseBtn" onclick="parseListing()">Read listing</button>
+      <div id="parseStatus" class="status"></div>
+    </section>
   </aside>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
