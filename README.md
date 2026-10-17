@@ -26,5 +26,5 @@ On an Intel Mac, if `pip` fails building `cryptography`, run `.venv/bin/pip inst
 ```
 
 ## Notes
-The demo listings in `data/demo_listings.json` are sample data for the demo, not real listings.
+The demo listings in `data/demo_listings.json` are 12 real 3-bedroom listings near UCLA from our own search (`reference/UCLA-Apartment-Map.html`). Their walk and bike times are from that search; the Google Maps step will replace them with cached Routes API results. Grocery distances stay "unknown" until then.
 Code was written with help from Claude Code.
