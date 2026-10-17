@@ -1,0 +1,17 @@
+# Secrets: never commit these (the repo is public for Devpost)
+.env
+.env.*
+!.env.example
+.mcp.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# API response cache (may contain addresses; rebuilt automatically)
+data/cache.json
+
+# macOS
+.DS_Store

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Should I Live Here?</title>
+  <!-- Placeholder page. Step 5 replaces the map part with the earlier UCLA map. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root { --bg: #f7f6f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a66; --line: #e3e1da;
+            --accent: #2f6fdf; --warn: #b4441c; --good: #2e7d4f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg);
+           display: grid; grid-template-columns: 1fr 380px; height: 100vh; }
+    #map { height: 100vh; }
+    aside { overflow-y: auto; padding: 16px; background: var(--panel); border-left: 1px solid var(--line); }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 20px 0 8px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .roommate { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+    .roommate input[type=text], .roommate input[type=number] { width: 48%; padding: 4px; }
+    .slider { display: grid; grid-template-columns: 70px 1fr 18px; align-items: center; gap: 6px; font-size: 13px; }
+    button { background: var(--accent); color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    textarea { width: 100%; height: 90px; font: inherit; font-size: 13px; }
+    .card { font-size: 13px; line-height: 1.45; min-width: 200px; }
+    .card b { font-size: 14px; }
+    .flag { color: var(--warn); }
+    .result { border-left: 4px solid var(--good); padding: 8px 10px; background: #f1f7f3; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    td, th { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+    @media (max-width: 800px) { body { grid-template-columns: 1fr; height: auto; } #map { height: 50vh; } }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <aside>
+    <h1>Should I Live Here?</h1>
+    <div class="muted">Each roommate sets what matters. We pick the place that's fairest for everyone.</div>
+
+    <h2>Roommates</h2>
+    <div id="roommates"></div>
+    <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
+
+    <h2>Decide</h2>
+    <button onclick="runDecision()">Find the fairest pick</button>
+    <div id="result" style="margin-top:10px"></div>
+
+    <h2>Add a listing</h2>
+    <textarea id="paste" placeholder="Paste listing text here"></textarea>
+    <button class="secondary" onclick="parseListing()">Read listing</button>
+    <div id="parseStatus" class="muted"></div>
+  </aside>
+
+<script>
+const FACTORS = ["rent", "walk", "laundry", "parking", "grocery"];
+const map = L.map("map").setView([34.0675, -118.449], 15);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors", maxZoom: 19
+}).addTo(map);
+L.marker([34.0729, -118.4421]).addTo(map).bindTooltip("UCLA (Royce Hall)");
+
+let listings = [];
+let roommates = [
+  { name: "Alex", budget: 1500, weights: { rent: 5, walk: 2, laundry: 3, parking: 1, grocery: 2 } },
+  { name: "Sam",  budget: 1900, weights: { rent: 2, walk: 5, laundry: 3, parking: 4, grocery: 3 } },
+];
+let markers = {};
+let lastDecision = null;
+
+const show = v => (v === null || v === undefined || v === "unknown") ? "<i>unknown</i>" : String(v).replace("_", " ");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function rentPerPerson(l) {
+  if (l.price == null) return null;
+  if (l.price_type === "whole_unit") return Math.round(l.price / roommates.length);
+  if (l.price_type === "per_room" || l.price_type === "per_bed") return l.price;
+  return null;
+}
+
+function cardHtml(l) {
+  const rpp = rentPerPerson(l);
+  let html = `<div class="card"><b>${esc(l.title)}</b><br>
+    Rent per person: ${rpp == null ? "<i>unknown</i>" : "$" + rpp}<br>
+    Walk to campus: ${l.walk_minutes == null ? "<i>unknown</i>" : l.walk_minutes + " min"}<br>
+    Groceries: ${l.grocery_walk_minutes == null ? "<i>unknown</i>" : l.grocery_walk_minutes + " min walk"}<br>
+    Laundry: ${show(l.laundry)} · Parking: ${show(l.parking)}`;
+  for (const f of l.red_flags || []) html += `<div class="flag">⚠ ${esc(f)}</div>`;
+  const ranked = lastDecision?.ranking.find(r => r.listing_id === l.id);
+  if (ranked) {
+    html += `<table><tr><th>Roommate</th><th>Score</th></tr>` +
+      ranked.per_roommate.map(p => `<tr><td>${esc(p.roommate)}</td><td>${p.score}</td></tr>`).join("") + `</table>`;
+  }
+  return html + "</div>";
+}
+
+function markerColor(l) {
+  const rpp = rentPerPerson(l);
+  if (rpp == null) return "#888";
+  return rpp < 1300 ? "#2e7d4f" : rpp < 1700 ? "#d49a1a" : "#b4441c";
+}
+
+function drawListings() {
+  Object.values(markers).forEach(m => m.remove());
+  markers = {};
+  for (const l of listings) {
+    if (l.lat == null || l.lng == null) continue;
+    const isPick = lastDecision?.pick.listing_id === l.id;
+    const m = L.circleMarker([l.lat, l.lng], {
+      radius: isPick ? 14 : 10, color: isPick ? "#1d1d1b" : "white", weight: isPick ? 3 : 2,
+      fillColor: markerColor(l), fillOpacity: 0.9
+    }).addTo(map);
+    m.bindTooltip(cardHtml(l), { direction: "top", offset: [0, -8] });
+    markers[l.id] = m;
+  }
+}
+
+function renderRoommates() {
+  const el = document.getElementById("roommates");
+  el.innerHTML = roommates.map((r, i) => `
+    <div class="roommate">
+      <input type="text" value="${esc(r.name)}" onchange="roommates[${i}].name=this.value">
+      <input type="number" value="${r.budget}" min="1" onchange="roommates[${i}].budget=+this.value" title="Max rent per month">
+      <div class="muted" style="margin:4px 0">How much each thing matters (0–5)</div>
+      ${FACTORS.map(f => `
+        <div class="slider"><span>${f}</span>
+          <input type="range" min="0" max="5" value="${r.weights[f]}"
+                 oninput="roommates[${i}].weights.${f}=+this.value; this.nextElementSibling.textContent=this.value">
+          <span>${r.weights[f]}</span></div>`).join("")}
+    </div>`).join("");
+}
+
+function addRoommate() {
+  roommates.push({ name: "Roommate " + (roommates.length + 1), budget: 1500,
+                   weights: { rent: 3, walk: 3, laundry: 3, parking: 3, grocery: 3 } });
+  renderRoommates();
+}
+
+async function runDecision() {
+  const res = await fetch("/api/decide", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listings, roommates })
+  });
+  const out = document.getElementById("result");
+  if (!res.ok) { out.textContent = "Error: " + (await res.json()).detail; return; }
+  lastDecision = await res.json();
+  const d = lastDecision;
+  out.innerHTML = `<div class="result">
+      <b>Fairest pick: ${esc(d.pick.title)}</b><br>
+      ${esc(d.least_happy.roommate)} gives up the most (score ${d.least_happy.score}, mostly on ${d.least_happy.gives_up_most_on}).
+      ${d.conflicts.length ? `<br><span class="flag">Disagreement on: ${d.conflicts.map(c => esc(c.title)).join(", ")}</span>` : ""}
+      <div id="explain" class="muted" style="margin-top:6px"></div>
+    </div>
+    <table><tr><th>Listing</th><th>Lowest</th><th>Average</th></tr>
+      ${d.ranking.map(r => `<tr><td>${esc(r.title)}${r.red_flags.length ? ' <span class="flag" title="Has red flags, so it can only win if every listing has one">⚠</span>' : ""}</td><td>${r.min_score}</td><td>${r.avg_score}</td></tr>`).join("")}
+    </table>`;
+  drawListings();
+  // Gemini writes the summary; the decision above is already made by our own code.
+  fetch("/api/explain", { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ pick: d.pick, least_happy: d.least_happy, favorites: d.favorites,
+                                                 ranking: d.ranking.map(r => ({ title: r.title, min: r.min_score, avg: r.avg_score })) }) })
+    .then(r => r.ok ? r.json() : null)
+    .then(j => { if (j) document.getElementById("explain").textContent = j.text; });
+}
+
+async function parseListing() {
+  const status = document.getElementById("parseStatus");
+  status.textContent = "Reading the listing…";
+  const res = await fetch("/api/parse", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: document.getElementById("paste").value })
+  });
+  const body = await res.json();
+  if (!res.ok) { status.textContent = "Error: " + body.detail; return; }
+  listings.push(body);
+  status.textContent = `Added "${body.title || "listing"}". ` +
+    (body.lat == null ? "It has no map location yet (step 4 adds this)." : "");
+  drawListings();
+}
+
+renderRoommates();
+fetch("/api/demo").then(r => r.json()).then(data => { listings = data; drawListings(); });
+</script>
+</body>
+</html>
