@@ -54,7 +54,9 @@ def decide(req: DecideRequest) -> dict:
     """Score every listing for every roommate and pick the fairest one."""
     if not req.listings or not req.roommates:
         raise HTTPException(status_code=400, detail="Need at least one listing and one roommate.")
-    return group.decide(req.listings, req.roommates)
+    # Each roommate's commute to their own place, from Google (cached). Scoring itself makes no calls.
+    commutes = maps_lookup.commutes_for(req.listings, req.roommates)
+    return group.decide(req.listings, req.roommates, commutes)
 
 
 @app.post("/api/explain")

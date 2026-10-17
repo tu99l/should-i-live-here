@@ -9,6 +9,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 Laundry = Literal["in_unit", "shared", "none", "unknown"]
 Parking = Literal["included", "paid", "none", "unknown"]
+TravelMode = Literal["WALK", "BICYCLE", "TRANSIT", "DRIVE"]
 
 
 class ListingFacts(BaseModel):
@@ -60,6 +61,9 @@ class Roommate(BaseModel):
     name: str
     budget: float = Field(..., gt=0, description="Most this person wants to pay per month")
     weights: Weights = Field(default_factory=Weights)
+    # Where this roommate needs to get to (campus, work, the beach...). Blank = the default campus.
+    place: Optional[str] = Field(None, max_length=200)
+    travel_mode: TravelMode = "WALK"
 
 
 class ParseRequest(BaseModel):

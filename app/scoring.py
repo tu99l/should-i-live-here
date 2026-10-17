@@ -18,8 +18,8 @@ CRITERIA = ["rent", "commute", "laundry", "parking", "bedrooms"]
 RENT_BEST_SHARE_OF_BUDGET = 0.75
 RENT_WORST_SHARE_OF_BUDGET = 1.25
 
-# Commute is the walk to campus in minutes: full marks at 10 minutes or less,
-# zero at 40 minutes or more (just past the 35-minute walk circle on the map).
+# Commute is minutes to the roommate's own place by their own travel mode (walk to campus by
+# default): full marks at 10 minutes or less, zero at 40 minutes or more.
 COMMUTE_BEST_MINUTES = 10
 COMMUTE_WORST_MINUTES = 40
 
@@ -39,7 +39,8 @@ def rent_per_person(listing: Listing, group_size: int) -> Optional[float]:
     return round(listing.rent_total_monthly / max(group_size, 1), 2)
 
 
-def criterion_scores(listing: Listing, roommate: Roommate, group_size: int) -> dict[str, tuple]:
+def criterion_scores(listing: Listing, roommate: Roommate, group_size: int,
+                     commute_minutes: Optional[float]) -> dict[str, tuple]:
     """(raw_value, 0-1 score) per criterion. Score is None when the fact is unknown."""
     rpp = rent_per_person(listing, group_size)
     b = roommate.budget
@@ -47,8 +48,8 @@ def criterion_scores(listing: Listing, roommate: Roommate, group_size: int) -> d
     return {
         "rent": (rpp, None if rpp is None else
                  _linear(rpp, RENT_BEST_SHARE_OF_BUDGET * b, RENT_WORST_SHARE_OF_BUDGET * b)),
-        "commute": (listing.walk_minutes, None if listing.walk_minutes is None else
-                    _linear(listing.walk_minutes, COMMUTE_BEST_MINUTES, COMMUTE_WORST_MINUTES)),
+        "commute": (commute_minutes, None if commute_minutes is None else
+                    _linear(commute_minutes, COMMUTE_BEST_MINUTES, COMMUTE_WORST_MINUTES)),
         "laundry": (listing.laundry, LAUNDRY_SCORES.get(listing.laundry)),
         "parking": (listing.parking, PARKING_SCORES.get(listing.parking)),
         # Enough bedrooms for everyone = 1.0, otherwise 0.0.
@@ -56,13 +57,22 @@ def criterion_scores(listing: Listing, roommate: Roommate, group_size: int) -> d
     }
 
 
-def score_listing(listing: Listing, roommate: Roommate, group_size: int) -> dict:
+_WALK_TO_CAMPUS = object()
+
+
+def score_listing(listing: Listing, roommate: Roommate, group_size: int,
+                  commute_minutes=_WALK_TO_CAMPUS) -> dict:
     """One roommate's 0-100 score for one listing, with the full breakdown.
+
+    `commute_minutes` is this roommate's own commute (looked up by the caller from Google).
+    If not given, the listing's walk to campus is used.
 
     Returns {roommate, score, breakdown, unknown, partial_data}. `score` is None only when
     nothing this roommate cares about is known for the listing.
     """
-    scores = criterion_scores(listing, roommate, group_size)
+    if commute_minutes is _WALK_TO_CAMPUS:
+        commute_minutes = listing.walk_minutes
+    scores = criterion_scores(listing, roommate, group_size, commute_minutes)
     raw_weights = roommate.weights.model_dump()
     unknown = [c for c in CRITERIA if scores[c][1] is None]
     known_total = sum(raw_weights[c] for c in CRITERIA if c not in unknown)

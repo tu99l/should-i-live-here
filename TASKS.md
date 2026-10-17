@@ -49,6 +49,14 @@ Demo move that flips the pick (tested, with real Google walk times): Sam's "laun
 - Pasted listings now get `lat`/`lng` from Google, so they appear on the map.
 - To refresh demo numbers: `.venv/bin/python scripts/refresh_demo_maps.py` (cached, so free after the first run).
 
+## For Tu: each roommate has their own place (new feature)
+Each roommate can now say where they need to get to and how. The backend looks up real commute times with Google (cached) and scores each roommate on their own commute.
+- Send two new optional fields per roommate in `/api/decide`: `place` (text, e.g. "Santa Monica Pier, Santa Monica, CA"; blank = UCLA) and `travel_mode` (`WALK` | `BICYCLE` | `TRANSIT` | `DRIVE`, default `WALK`). UI idea: a text box "Where do you need to get to?" and a small walk/bike/transit/drive picker under each roommate's name.
+- Each `per_roommate` result now has `commute_to` and `travel_mode`; the `commute` breakdown row's `raw_value` is that roommate's minutes. Show it in the card's score table (e.g. "Sam: 31 min by bike to Santa Monica Pier").
+- If the least happy roommate's reason is commute, the reason includes `commute_to` and `travel_mode`.
+- Tell users to type a specific place ("Santa Monica Pier"), not just "the beach"; Google routes to whatever it thinks that text means.
+- Demo moment (tested live): with the default roommates, setting Sam to "Santa Monica Pier, Santa Monica, CA" by bike moves the pick from 424 Landfair to 1824 Fairburn, and Alex becomes least happy (rent $1,517 each, 43 min walk to campus).
+
 ## Missing inputs
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."

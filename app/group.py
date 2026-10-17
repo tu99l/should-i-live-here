@@ -8,6 +8,8 @@
    the criteria that cost them the most points, with the listing's actual facts.
 4. Conflicts: listings where roommates' scores are far apart, and each roommate's own favorite.
 """
+from typing import Optional
+
 from .models import Listing, Roommate
 from .scoring import CRITERIA, rent_per_person, score_listing
 
@@ -24,15 +26,32 @@ def _reasons(result: dict) -> list[dict]:
     """The criteria that cost this roommate the most points, biggest loss first."""
     lost = [b for b in result["breakdown"] if not b["unknown"] and b["points_lost"] > 0]
     lost.sort(key=lambda b: b["points_lost"], reverse=True)
-    return [{"criterion": b["criterion"], "raw_value": b["raw_value"], "points_lost": b["points_lost"]}
-            for b in lost[:REASONS_SHOWN]]
+    reasons = []
+    for b in lost[:REASONS_SHOWN]:
+        reason = {"criterion": b["criterion"], "raw_value": b["raw_value"], "points_lost": b["points_lost"]}
+        if b["criterion"] == "commute":  # Say where to and how, e.g. 31 min by BICYCLE to Santa Monica Pier.
+            reason["commute_to"] = result.get("commute_to")
+            reason["travel_mode"] = result.get("travel_mode")
+        reasons.append(reason)
+    return reasons
 
 
-def decide(listings: list[Listing], roommates: list[Roommate]) -> dict:
+def decide(listings: list[Listing], roommates: list[Roommate],
+           commutes: Optional[dict[tuple[int, int], Optional[float]]] = None) -> dict:
+    """`commutes` maps (listing index, roommate index) to that roommate's commute minutes
+    (from maps_lookup.commutes_for). Without it, everyone's commute is the walk to campus."""
     group_size = len(roommates)
     results = []
-    for listing in listings:
-        per_roommate = [score_listing(listing, r, group_size) for r in roommates]
+    for li, listing in enumerate(listings):
+        per_roommate = []
+        for ri, r in enumerate(roommates):
+            if commutes is None:
+                p = score_listing(listing, r, group_size)
+            else:
+                p = score_listing(listing, r, group_size, commutes.get((li, ri)))
+            p["commute_to"] = r.place or None  # None = the default campus.
+            p["travel_mode"] = r.travel_mode
+            per_roommate.append(p)
         scores = [p["score"] for p in per_roommate]
         known = [s for s in scores if s is not None]
         unknown = per_roommate[0]["unknown"]  # Which facts are missing is the same for everyone.

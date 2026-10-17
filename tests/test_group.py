@@ -125,3 +125,30 @@ def test_changing_one_roommates_weights_can_flip_the_pick():
 
     assert pick(3) == "landfair-424"
     assert pick(5) == "fairburn-1824"
+
+
+def test_each_roommate_is_judged_on_their_own_commute():
+    # Same two listings; the beach-goer's commute favours "west", the campus walker's favours "east".
+    west = make_listing(id="west", walk_minutes=40)
+    east = make_listing(id="east", walk_minutes=10)
+    campus = person("Campus", commute=5)
+    beach = Roommate(name="Beach", budget=1500, weights=Weights(**{**ALL_ZERO, "commute": 5}),
+                     place="Santa Monica Pier", travel_mode="BICYCLE")
+    commutes = {(0, 0): 40, (1, 0): 10,   # Campus walker: listing order west, east.
+                (0, 1): 10, (1, 1): 40}   # Beach biker: west is close to the beach.
+    result = decide([west, east], [campus, beach], commutes)
+    assert result["favorites"] == {"Campus": "east", "Beach": "west"}
+    beach_row = next(p for p in result["ranking"][0]["per_roommate"] if p["roommate"] == "Beach")
+    assert beach_row["commute_to"] == "Santa Monica Pier" and beach_row["travel_mode"] == "BICYCLE"
+    # Whoever is least happy, their commute reason names where they go and how.
+    reason = result["least_happy"]["reasons"][0]
+    assert reason["criterion"] == "commute" and "travel_mode" in reason
+
+
+def test_unknown_commute_for_one_roommate_is_excluded_not_guessed():
+    listing = make_listing(id="a", laundry="none")
+    beach = Roommate(name="Beach", budget=1500, weights=Weights(**{**ALL_ZERO, "commute": 5, "laundry": 1}),
+                     place="Somewhere Google can't route", travel_mode="DRIVE")
+    result = decide([listing], [beach], {(0, 0): None})
+    row = result["ranking"][0]["per_roommate"][0]
+    assert row["unknown"] == ["commute"] and row["score"] == 0  # Judged on laundry (none) only.

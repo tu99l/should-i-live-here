@@ -85,3 +85,62 @@ def test_known_coordinates_are_kept(monkeypatch):
 def test_straight_line_distance():
     # About 1.11 km per 0.01 degree of latitude.
     assert maps_lookup._meters_between(34.0, -118.0, 34.01, -118.0) == pytest.approx(1112, abs=5)
+
+
+# ---------- Per-roommate commutes (Route Matrix) ----------
+
+class FakeMatrix:
+    """Answers Route Matrix calls: origin i takes (i + 1) * 10 minutes; origin 2 has no route."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, url, headers, json, timeout):
+        assert "computeRouteMatrix" in url
+        self.calls.append(json)
+        out = []
+        for i, _ in enumerate(json["origins"]):
+            el = {"originIndex": i, "destinationIndex": 0, "status": {}}
+            if i == 2:
+                el["condition"] = "ROUTE_NOT_FOUND"
+            else:
+                el.update(condition="ROUTE_EXISTS", duration=f"{(i + 1) * 600}s")
+            out.append(el)
+        return httpx.Response(200, json=out, request=httpx.Request("POST", url))
+
+
+def test_matrix_answers_each_origin_and_caches_each(monkeypatch):
+    fake = use(monkeypatch, FakeMatrix())
+    origins = [{"lat": 34.0, "lng": -118.0}, {"lat": 34.1, "lng": -118.1}, {"address": "Nowhere"}]
+    assert maps_lookup.commute_minutes(origins, "Santa Monica Pier", "BICYCLE") == [10.0, 20.0, None]
+    assert maps_lookup.commute_minutes(origins, "Santa Monica Pier", "BICYCLE") == [10.0, 20.0, None]
+    assert len(fake.calls) == 1  # "No route" is cached too, so the second ask is free.
+    maps_lookup.commute_minutes(origins[:1], "Santa Monica Pier", "DRIVE")
+    assert len(fake.calls) == 2  # A different travel mode is a different question.
+
+
+def test_matrix_error_for_one_pair_is_unknown_and_not_cached(monkeypatch):
+    def broken(url, headers, json, timeout):
+        body = [{"originIndex": 0, "destinationIndex": 0, "status": {"code": 5, "message": "NOT_FOUND"}}]
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+    use(monkeypatch, broken)
+    assert maps_lookup.commute_minutes([{"address": "x"}], "Pier", "WALK") == [None]
+    use(monkeypatch, FakeMatrix())
+    assert maps_lookup.commute_minutes([{"address": "x"}], "Pier", "WALK") == [10.0]
+
+
+def test_commutes_for_reuses_saved_campus_times_and_groups_places(monkeypatch):
+    from app.models import Listing, Roommate
+    fake = use(monkeypatch, FakeMatrix())
+    listings = [Listing(id="a", lat=34.0, lng=-118.0, walk_minutes=18, bike_minutes=8),
+                Listing(id="b", lat=34.1, lng=-118.1, walk_minutes=40, bike_minutes=14)]
+    roommates = [Roommate(name="Campus walker", budget=1500),
+                 Roommate(name="Campus biker", budget=1500, travel_mode="BICYCLE"),
+                 Roommate(name="Beach biker", budget=1500, place="Santa Monica Pier", travel_mode="BICYCLE"),
+                 Roommate(name="Beach biker 2", budget=1500, place="Santa Monica Pier", travel_mode="BICYCLE")]
+    c = maps_lookup.commutes_for(listings, roommates)
+    assert c[(0, 0)] == 18 and c[(1, 0)] == 40   # Saved walk times, no call.
+    assert c[(0, 1)] == 8 and c[(1, 1)] == 14    # Saved bike times, no call.
+    assert c[(0, 2)] == 10 and c[(1, 2)] == 20   # From Google.
+    assert c[(0, 3)] == 10
+    assert len(fake.calls) == 1  # Both beach bikers share one call.

@@ -131,3 +131,78 @@ def lookup(place: Place) -> dict:
     result.update(groceries(lat, lng) if lat is not None and lng is not None else
                   {"grocery_count": None, "nearest_grocery": None, "grocery_walk_minutes": None})
     return result
+
+
+# ---------- Per-roommate commutes (step 6b: each roommate has their own place and travel mode) ----------
+
+MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
+MATRIX_BATCH = 50  # Origins per call; Google allows up to 625 elements (100 for transit).
+
+
+def commute_minutes(origins: list[Place], dest: str, mode: str) -> list[Optional[float]]:
+    """Minutes from each origin to one destination by one travel mode. None where unknown.
+
+    Uses Google's Route Matrix (many origins in one call). Each origin's answer is cached on
+    its own, so adding a listing or changing a slider never re-pays for known routes.
+    """
+    keys = ["matrix|" + json.dumps({"o": _waypoint(o), "d": dest, "m": mode}, sort_keys=True) for o in origins]
+    out: list[Optional[float]] = [None] * len(origins)
+    missing = []
+    for i, k in enumerate(keys):
+        hit = cache.get("maps", k)
+        if hit is not None:
+            out[i] = hit["minutes"]
+        else:
+            missing.append(i)
+
+    api_key = _key()
+    for start in range(0, len(missing) if api_key else 0, MATRIX_BATCH):
+        batch = missing[start:start + MATRIX_BATCH]
+        body = {"origins": [{"waypoint": _waypoint(origins[i])} for i in batch],
+                "destinations": [{"waypoint": {"address": dest}}],
+                "travelMode": mode}
+        try:
+            r = httpx.post(MATRIX_URL, json=body, timeout=30, headers={
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": "originIndex,destinationIndex,duration,condition,status"})
+            r.raise_for_status()
+            elements = r.json()
+        except (httpx.HTTPError, ValueError):
+            continue  # Unknown for now; not cached, so a later request can try again.
+        for el in elements:
+            if (el.get("status") or {}).get("code"):
+                continue  # Google reported an error for this pair: unknown, not cached.
+            i = batch[el["originIndex"]]
+            if el.get("condition") == "ROUTE_EXISTS" and "duration" in el:
+                out[i] = round(int(el["duration"].rstrip("s")) / 60, 1)
+            cache.put("maps", keys[i], {"minutes": out[i]})  # "No route" is a real answer, so it is cached too.
+    return out
+
+
+def commutes_for(listings, roommates) -> dict[tuple[int, int], Optional[float]]:
+    """{(listing index, roommate index): minutes} for each roommate's own place and travel mode.
+
+    A roommate with no place set uses the default destination (campus). For walking or biking
+    there, the minutes already saved on each listing are reused, so the demo needs no calls.
+    """
+    default = destination()
+    result: dict[tuple[int, int], Optional[float]] = {}
+    groups: dict[tuple[str, str], list[int]] = {}
+    for ri, r in enumerate(roommates):
+        place = (r.place or "").strip()
+        if not place and r.travel_mode in ("WALK", "BICYCLE"):
+            field = "walk_minutes" if r.travel_mode == "WALK" else "bike_minutes"
+            for li, l in enumerate(listings):
+                result[(li, ri)] = getattr(l, field)
+        else:
+            groups.setdefault((place or default, r.travel_mode), []).append(ri)
+
+    for (dest, mode), roommate_indexes in groups.items():
+        located = [li for li, l in enumerate(listings) if (l.lat is not None and l.lng is not None) or l.address]
+        origins = [{"lat": listings[li].lat, "lng": listings[li].lng} if listings[li].lat is not None
+                   else {"address": listings[li].address} for li in located]
+        minutes = dict(zip(located, commute_minutes(origins, dest, mode)))
+        for ri in roommate_indexes:
+            for li in range(len(listings)):
+                result[(li, ri)] = minutes.get(li)
+    return result
