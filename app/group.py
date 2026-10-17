@@ -1,18 +1,31 @@
-"""Group decision: score every listing for every roommate, then pick the fairest one.
+"""Step 6: the group decision. Plain code, no AI.
 
-Fair pick = the listing whose least-happy roommate is happiest (maximin), ties broken by the
-higher average. Listings with red flags only win if every listing has one.
-(Step 6 will extend this; the response shape is what static/app.js reads.)
+1. Every roommate scores every listing with their own weights (scoring.py).
+2. Fair pick = the listing whose LEAST happy roommate is happiest (maximin).
+   Ties go to the higher average score, then to the listing with more known facts.
+   Listings with red flags only win if every listing has one.
+3. For the pick we report each roommate's score, who is least happy, and why:
+   the criteria that cost them the most points, with the listing's actual facts.
+4. Conflicts: listings where roommates' scores are far apart, and each roommate's own favorite.
 """
 from .models import Listing, Roommate
-from .scoring import rent_per_person, score_listing
+from .scoring import CRITERIA, rent_per_person, score_listing
 
-CONFLICT_GAP = 25  # Roommate scores this far apart on one listing count as a disagreement.
+CONFLICT_GAP = 25  # Roommate scores this far apart (out of 100) on one listing count as a disagreement.
+REASONS_SHOWN = 2  # How many "why" criteria to report for the least happy roommate.
 
 
 def _rank_value(score):
     """For sorting only: a listing with no usable score ranks below every scored one."""
     return -1 if score is None else score
+
+
+def _reasons(result: dict) -> list[dict]:
+    """The criteria that cost this roommate the most points, biggest loss first."""
+    lost = [b for b in result["breakdown"] if not b["unknown"] and b["points_lost"] > 0]
+    lost.sort(key=lambda b: b["points_lost"], reverse=True)
+    return [{"criterion": b["criterion"], "raw_value": b["raw_value"], "points_lost": b["points_lost"]}
+            for b in lost[:REASONS_SHOWN]]
 
 
 def decide(listings: list[Listing], roommates: list[Roommate]) -> dict:
@@ -22,40 +35,57 @@ def decide(listings: list[Listing], roommates: list[Roommate]) -> dict:
         per_roommate = [score_listing(listing, r, group_size) for r in roommates]
         scores = [p["score"] for p in per_roommate]
         known = [s for s in scores if s is not None]
+        unknown = per_roommate[0]["unknown"]  # Which facts are missing is the same for everyone.
         results.append({
             "listing_id": listing.id,
             "title": listing.title or listing.address or listing.id,
             "rent_per_person": rent_per_person(listing, group_size),
+            # If anyone has no usable score, the worst case is unknown, so it can't win on maximin.
             "min_score": min(known) if len(known) == len(scores) else None,
             "avg_score": round(sum(known) / len(known), 1) if known else None,
             "gap": round(max(known) - min(known), 1) if known else 0.0,
-            "partial_data": any(p["partial_data"] for p in per_roommate),
+            "partial_data": bool(unknown),
+            "unknown": unknown,
+            "known_share": round(1 - len(unknown) / len(CRITERIA), 2),
             "red_flags": listing.red_flags,
             "per_roommate": per_roommate,
         })
 
-    # Clean listings first, then maximin: best worst-case, then best average.
-    results.sort(key=lambda r: (not r["red_flags"], _rank_value(r["min_score"]), _rank_value(r["avg_score"])),
-                 reverse=True)
+    # Clean listings first, then maximin, then average, then more known facts.
+    results.sort(key=lambda r: (not r["red_flags"], _rank_value(r["min_score"]),
+                                _rank_value(r["avg_score"]), r["known_share"]), reverse=True)
+    for rank, r in enumerate(results, start=1):
+        r["rank"] = rank
     pick = results[0]
 
     least_happy = min(pick["per_roommate"], key=lambda p: _rank_value(p["score"]))
-    biggest_loss = max(least_happy["breakdown"], key=lambda b: b["points_lost"])
+    reasons = _reasons(least_happy)
 
-    # Each roommate's own favorite, to show where the group disagrees.
+    # Each roommate's own favorite (their highest score), to show where the group disagrees.
     favorites = {}
     for i, r in enumerate(roommates):
         best = max(results, key=lambda res: _rank_value(res["per_roommate"][i]["score"]))
         favorites[r.name] = best["listing_id"]
 
     return {
-        "pick": {"listing_id": pick["listing_id"], "title": pick["title"]},
+        "pick": {
+            "listing_id": pick["listing_id"],
+            "title": pick["title"],
+            "scores": [{"roommate": p["roommate"], "score": p["score"]} for p in pick["per_roommate"]],
+            "min_score": pick["min_score"],
+            "avg_score": pick["avg_score"],
+            "partial_data": pick["partial_data"],
+            "unknown": pick["unknown"],
+        },
         "least_happy": {
             "roommate": least_happy["roommate"],
             "score": least_happy["score"],
-            "gives_up_most_on": biggest_loss["criterion"],
+            # Biggest single loss; None if they lost nothing (a perfect score).
+            "gives_up_most_on": reasons[0]["criterion"] if reasons else None,
+            "reasons": reasons,
         },
         "favorites": favorites,
+        "everyone_agrees": len(set(favorites.values())) == 1,
         "conflicts": [
             {"listing_id": r["listing_id"], "title": r["title"], "gap": r["gap"]}
             for r in results if r["gap"] >= CONFLICT_GAP

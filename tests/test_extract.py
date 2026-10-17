@@ -158,3 +158,18 @@ def test_fact_rejected_twice_stays_unknown(monkeypatch):
     assert e.rent_total_monthly is None
     assert e.rejected == ["rent_total_monthly"]
     assert e.bedrooms == 3  # Other facts are still kept.
+
+
+def test_explanation_is_cached(monkeypatch):
+    calls = []
+
+    class FakeModels:
+        def generate_content(self, model, contents):
+            calls.append(contents)
+            return type("R", (), {"text": " Pick A. "})()
+
+    monkeypatch.setattr(extract, "_client", lambda: type("C", (), {"models": FakeModels()})())
+    decision = {"pick": {"title": "A"}, "least_happy": {"roommate": "B"}}
+    assert extract.explain_decision(decision) == "Pick A."
+    assert extract.explain_decision(decision) == "Pick A."
+    assert len(calls) == 1

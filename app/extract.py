@@ -233,10 +233,17 @@ def explain_decision(decision: dict) -> str:
     prompt = (
         "Explain this apartment decision to a group of student roommates in 3 short sentences. "
         "Use only the numbers given. Say which place was picked, why it is fair, and who gives up "
-        "the most and on what.\n\n" + json.dumps(decision)
+        "the most and on what.\n\n" + json.dumps(decision, sort_keys=True)
     )
+    key = f"{_model()}|{prompt}"
+    cached = cache.get("explain", key)
+    if cached is not None:
+        return cached
     response = _client().models.generate_content(model=_model(), contents=prompt)
-    return (response.text or "").strip()
+    text = (response.text or "").strip()
+    if text:
+        cache.put("explain", key, text)
+    return text
 
 
 if __name__ == "__main__":

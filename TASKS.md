@@ -10,7 +10,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | 3 | `scoring.py`: weights sum to 1, breakdown, unknowns excluded, tests | Freddy | 5:00 PM | done |
 | 4 | `maps_lookup.py`: walk/bike time + groceries, cached, billing cap set | Freddy | 6:00 PM | todo |
 | 5 | Map UI from `reference/UCLA-Apartment-Map.html`, demo listings load | Teammate | 5:00 PM | done (Tu) |
-| 6 | `group.py`: maximin fair pick, who is least happy and why | Freddy | 8:00 PM | todo |
+| 6 | `group.py`: maximin fair pick, who is least happy and why | Freddy | 8:00 PM | done |
 | 7 | Photon iMessage (gated: only after 2 to 5 work; cut at 7:00 PM if no reply) | Whoever is free | ~6:00 PM | todo |
 | 8 | Design pass: palette, fonts, empty and loading states | Teammate | 10:00 PM | todo |
 | 9 | Devpost draft, thumbnail (5:3), README | Teammate | 11:00 PM | todo |
@@ -34,6 +34,14 @@ The starter code was written before the brief, so it uses different names. Fix t
 - Breakdown rows now carry `criterion`, `raw_value`, `criterion_score`, `weight` (0-1), `contribution`, `points_lost`, `unknown`. `factor` still works but is the old name.
 - Each roommate result and each ranking row has `partial_data: true` when some facts are unknown. Worth a small "partial data" badge on the card.
 - `/api/parse` now returns the brief's names plus `evidence` (exact quotes). Showing the quote on hover would help with judges.
+
+## For Tu, from step 6 (all optional; nothing existing changed)
+New fields in `/api/decide`:
+- `pick.scores`: each roommate's score for the pick. `pick.unknown` / `pick.partial_data`.
+- `least_happy.reasons`: up to 2 of `{criterion, raw_value, points_lost}`, e.g. laundry "shared" cost Jordan 18.8 points. Nicer than `gives_up_most_on` alone. `gives_up_most_on` is `null` if the pick is perfect for them.
+- `everyone_agrees`: true when every roommate's favorite is the same listing.
+- Ranking rows: `rank`, `unknown`, `known_share` (0-1, share of the 5 facts known).
+Demo move that flips the pick (tested): Alex's "rent" slider 5 -> 3 changes the pick from 424 Landfair to 1824 Fairburn.
 
 ## Missing inputs
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.
