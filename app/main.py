@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-from . import commute, parser, scoring  # noqa: E402  (imports read .env, so load it first)
+from . import commute, extract, scoring  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,11 +33,11 @@ def demo_listings() -> list[Listing]:
 def parse_listing(req: ParseRequest) -> Listing:
     """Pasted listing text -> structured listing with real commute times."""
     try:
-        fields = parser.extract_listing(req.text)
+        facts = extract.extract_listing(req.text)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Could not read the listing: {e}")
 
-    listing = Listing(id=uuid.uuid4().hex[:8], **fields.model_dump())
+    listing = Listing(id=uuid.uuid4().hex[:8], evidence=facts.evidence, **extract.to_listing_fields(facts))
     if listing.address:
         listing.walk_minutes = commute.travel_minutes(listing.address, "WALK")
         listing.bike_minutes = commute.travel_minutes(listing.address, "BICYCLE")
@@ -56,6 +56,6 @@ def decide(req: DecideRequest) -> dict:
 def explain(decision: dict) -> dict:
     """Plain-English summary of a decision that scoring.decide already made."""
     try:
-        return {"text": parser.explain_decision(decision)}
+        return {"text": extract.explain_decision(decision)}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Could not write the explanation: {e}")
