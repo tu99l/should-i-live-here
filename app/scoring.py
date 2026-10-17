@@ -1,124 +1,95 @@
-"""Our own scoring and group-decision code. No AI here: every number is explainable.
+"""Step 3: our own scoring. No AI here: every number can be traced to a fact and a weight.
 
-1. Each factor (rent, walk, laundry, parking, grocery) gets a 0-1 score per listing.
-2. Each roommate's score for a listing = their weighted average of those factor scores, 0-100.
-3. Fairest pick = the listing whose least-happy roommate is happiest (maximin).
-   Ties go to the higher average score. Listings with red flags only win if every listing has one.
+For one roommate and one listing:
+1. Each criterion gets a 0-1 score from the listing's facts (rules below).
+2. The roommate's 0-5 weights are re-normalized to sum to 1.
+3. A criterion whose fact is unknown is EXCLUDED and the remaining weights are re-normalized,
+   so missing data is never guessed. The listing is flagged "partial data".
+4. Score = 100 * sum(weight * criterion score), so it runs from 0 to 100.
 """
 from typing import Optional
 
 from .models import Listing, Roommate
 
-FACTORS = ["rent", "walk", "laundry", "parking", "grocery"]
-UNKNOWN_SCORE = 0.5  # Missing facts count as neutral, and are reported as unknown.
-CONFLICT_GAP = 25  # Roommate scores this far apart on one listing count as a disagreement.
+CRITERIA = ["rent", "commute", "laundry", "parking", "bedrooms"]
 
-LAUNDRY_SCORES = {"in_unit": 1.0, "in_building": 0.6, "none": 0.0}
-PARKING_SCORES = {"included": 1.0, "extra_cost": 0.5, "none": 0.0}
+# Rent per person is judged against the roommate's own budget (a user input):
+# full marks at 75% of budget or less, zero at 125% of budget or more, straight line between.
+RENT_BEST_SHARE_OF_BUDGET = 0.75
+RENT_WORST_SHARE_OF_BUDGET = 1.25
 
+# Commute is the walk to campus in minutes: full marks at 10 minutes or less,
+# zero at 40 minutes or more (just past the 35-minute walk circle on the map).
+COMMUTE_BEST_MINUTES = 10
+COMMUTE_WORST_MINUTES = 40
 
-def _clamp(x: float) -> float:
-    return max(0.0, min(1.0, x))
+LAUNDRY_SCORES = {"in_unit": 1.0, "shared": 0.4, "none": 0.0}
+PARKING_SCORES = {"included": 1.0, "paid": 0.5, "none": 0.0}
 
 
 def _linear(value: float, best: float, worst: float) -> float:
     """1.0 at `best` or better, 0.0 at `worst` or beyond, straight line in between."""
-    return _clamp((worst - value) / (worst - best))
+    return max(0.0, min(1.0, (worst - value) / (worst - best)))
 
 
 def rent_per_person(listing: Listing, group_size: int) -> Optional[float]:
-    if listing.price is None:
+    """Whole-unit rent split evenly. The group size comes from the user, never the model."""
+    if listing.rent_total_monthly is None:
         return None
-    if listing.price_type in ("per_room", "per_bed"):
-        return listing.price
-    if listing.price_type == "whole_unit":
-        return round(listing.price / max(group_size, 1), 2)
-    return None  # Price type unclear: don't guess how it splits.
+    return round(listing.rent_total_monthly / max(group_size, 1), 2)
 
 
-def factor_scores(listing: Listing, roommate: Roommate, group_size: int) -> dict[str, Optional[float]]:
-    """0-1 score per factor, or None when the fact is unknown."""
+def criterion_scores(listing: Listing, roommate: Roommate, group_size: int) -> dict[str, tuple]:
+    """(raw_value, 0-1 score) per criterion. Score is None when the fact is unknown."""
     rpp = rent_per_person(listing, group_size)
     b = roommate.budget
+    beds = listing.bedrooms
     return {
-        # Full marks at 75% of budget, zero at 125% of budget.
-        "rent": None if rpp is None else _linear(rpp, 0.75 * b, 1.25 * b),
-        # Full marks at a 10-minute walk, zero at 40 minutes.
-        "walk": None if listing.walk_minutes is None else _linear(listing.walk_minutes, 10, 40),
-        "laundry": LAUNDRY_SCORES.get(listing.laundry),
-        "parking": PARKING_SCORES.get(listing.parking),
-        # Full marks at a 5-minute walk to groceries, zero at 25 minutes.
-        "grocery": None if listing.grocery_walk_minutes is None else _linear(listing.grocery_walk_minutes, 5, 25),
+        "rent": (rpp, None if rpp is None else
+                 _linear(rpp, RENT_BEST_SHARE_OF_BUDGET * b, RENT_WORST_SHARE_OF_BUDGET * b)),
+        "commute": (listing.walk_minutes, None if listing.walk_minutes is None else
+                    _linear(listing.walk_minutes, COMMUTE_BEST_MINUTES, COMMUTE_WORST_MINUTES)),
+        "laundry": (listing.laundry, LAUNDRY_SCORES.get(listing.laundry)),
+        "parking": (listing.parking, PARKING_SCORES.get(listing.parking)),
+        # Enough bedrooms for everyone = 1.0, otherwise 0.0.
+        "bedrooms": (beds, None if beds is None else (1.0 if beds >= group_size else 0.0)),
     }
 
 
-def score_for_roommate(listing: Listing, roommate: Roommate, group_size: int) -> dict:
-    """One roommate's 0-100 score for one listing, with the breakdown shown on the card."""
-    scores = factor_scores(listing, roommate, group_size)
-    weights = roommate.weights.model_dump()
-    total_weight = sum(weights.values())
+def score_listing(listing: Listing, roommate: Roommate, group_size: int) -> dict:
+    """One roommate's 0-100 score for one listing, with the full breakdown.
+
+    Returns {roommate, score, breakdown, unknown, partial_data}. `score` is None only when
+    nothing this roommate cares about is known for the listing.
+    """
+    scores = criterion_scores(listing, roommate, group_size)
+    raw_weights = roommate.weights.model_dump()
+    unknown = [c for c in CRITERIA if scores[c][1] is None]
+    known_total = sum(raw_weights[c] for c in CRITERIA if c not in unknown)
 
     breakdown = []
-    points_sum = 0.0
-    for f in FACTORS:
-        s = scores[f] if scores[f] is not None else UNKNOWN_SCORE
-        points = 100 * weights[f] * s / total_weight if total_weight else 0
-        points_sum += points
+    total = 0.0
+    for c in CRITERIA:
+        raw_value, s = scores[c]
+        weight = raw_weights[c] / known_total if (s is not None and known_total) else 0.0
+        contribution = 100 * weight * s if s is not None else 0.0
+        total += contribution
         breakdown.append({
-            "factor": f,
-            "weight": weights[f],
-            "factor_score": None if scores[f] is None else round(scores[f], 2),
-            "unknown": scores[f] is None,
-            "points": round(points, 1),
-            # Points lost compared with a perfect score on this factor.
-            "points_lost": round(100 * weights[f] * (1 - s) / total_weight, 1) if total_weight else 0,
+            "criterion": c,
+            "factor": c,  # Same as "criterion"; kept because static/app.js reads it.
+            "raw_value": raw_value,
+            "criterion_score": None if s is None else round(s, 3),
+            "weight": round(weight, 3),
+            "contribution": round(contribution, 1),
+            # Points this criterion cost compared with a perfect score on it.
+            "points_lost": round(100 * weight * (1 - s), 1) if s is not None else 0.0,
+            "unknown": s is None,
         })
-
-    total = points_sum if total_weight else 50.0
-    return {"roommate": roommate.name, "score": round(total, 1), "breakdown": breakdown}
-
-
-def decide(listings: list[Listing], roommates: list[Roommate]) -> dict:
-    group_size = len(roommates)
-    results = []
-    for listing in listings:
-        per_roommate = [score_for_roommate(listing, r, group_size) for r in roommates]
-        scores = [p["score"] for p in per_roommate]
-        results.append({
-            "listing_id": listing.id,
-            "title": listing.title,
-            "rent_per_person": rent_per_person(listing, group_size),
-            "min_score": min(scores),
-            "avg_score": round(sum(scores) / len(scores), 1),
-            "gap": round(max(scores) - min(scores), 1),
-            "red_flags": listing.red_flags,
-            "per_roommate": per_roommate,
-        })
-
-    # Clean listings first, then maximin: best worst-case, then best average.
-    results.sort(key=lambda r: (not r["red_flags"], r["min_score"], r["avg_score"]), reverse=True)
-    pick = results[0]
-
-    least_happy = min(pick["per_roommate"], key=lambda p: p["score"])
-    biggest_loss = max(least_happy["breakdown"], key=lambda b: b["points_lost"])
-
-    # Each roommate's own favorite, to show where the group disagrees.
-    favorites = {}
-    for r in roommates:
-        best = max(results, key=lambda res: next(p["score"] for p in res["per_roommate"] if p["roommate"] == r.name))
-        favorites[r.name] = best["listing_id"]
 
     return {
-        "pick": {"listing_id": pick["listing_id"], "title": pick["title"]},
-        "least_happy": {
-            "roommate": least_happy["roommate"],
-            "score": least_happy["score"],
-            "gives_up_most_on": biggest_loss["factor"],
-        },
-        "favorites": favorites,
-        "conflicts": [
-            {"listing_id": r["listing_id"], "title": r["title"], "gap": r["gap"]}
-            for r in results if r["gap"] >= CONFLICT_GAP
-        ],
-        "ranking": results,
+        "roommate": roommate.name,
+        "score": round(total, 1) if known_total else None,
+        "breakdown": breakdown,
+        "unknown": unknown,
+        "partial_data": bool(unknown),
     }

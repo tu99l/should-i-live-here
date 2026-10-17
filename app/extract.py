@@ -11,16 +11,14 @@ import json
 import os
 import re
 import sys
-from typing import Literal, Optional
+from typing import Optional
 
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 
 from . import cache
-
-Laundry = Literal["in_unit", "shared", "none", "unknown"]
-Parking = Literal["included", "paid", "none", "unknown"]
+from .models import Laundry, ListingFacts, Parking
 
 # Fields that need an evidence quote when they have a value.
 FACT_FIELDS = [
@@ -78,17 +76,9 @@ class GeminiReply(BaseModel):
     evidence: Evidence = Field(default_factory=Evidence)
 
 
-class Extracted(BaseModel):
+class Extracted(ListingFacts):
     """Checked facts, the schema from CLAUDE.md. Every non-null fact has a verified quote."""
 
-    address: Optional[str] = None
-    rent_total_monthly: Optional[float] = None
-    bedrooms: Optional[int] = None
-    bathrooms: Optional[float] = None
-    laundry: Laundry = "unknown"
-    parking: Parking = "unknown"
-    utilities_included: Optional[bool] = None
-    available_from: Optional[str] = None
     evidence: dict[str, str] = Field(default_factory=dict)
     rejected: list[str] = Field(default_factory=list, description="Fields Gemini filled but we threw out")
 
@@ -235,24 +225,6 @@ def extract_listing(text: str) -> Extracted:
     result = merge_attempts(attempts)
     cache.put("extract", key, result.model_dump())
     return result
-
-
-def to_listing_fields(e: Extracted) -> dict:
-    """TEMPORARY bridge to the current Listing shape in models.py, so the map keeps working.
-
-    Remove in step 3 when models.py switches to the brief's schema.
-    """
-    return {
-        "title": e.address or "Pasted listing",
-        "address": e.address,
-        "price": e.rent_total_monthly,
-        "price_type": "whole_unit" if e.rent_total_monthly is not None else "unknown",
-        "bedrooms": e.bedrooms,
-        "bathrooms": e.bathrooms,
-        "laundry": {"shared": "in_building"}.get(e.laundry, e.laundry),
-        "parking": {"paid": "extra_cost"}.get(e.parking, e.parking),
-        "red_flags": [],
-    }
 
 
 # ---------- Explanations (Gemini writes words about a decision our code already made) ----------

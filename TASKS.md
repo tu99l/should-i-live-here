@@ -7,7 +7,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | --- | --- | --- | --- | --- |
 | 1 | Repo, `.env`, `.gitignore`, CLAUDE.md; both can run the app locally | Both | 2:30 PM | Freddy: done. Tu: done |
 | 2 | `extract.py`: pasted text to validated JSON with evidence quotes | Freddy | 4:00 PM | done |
-| 3 | `scoring.py`: weights sum to 1, breakdown, unknowns excluded, tests | Freddy | 5:00 PM | todo |
+| 3 | `scoring.py`: weights sum to 1, breakdown, unknowns excluded, tests | Freddy | 5:00 PM | done |
 | 4 | `maps_lookup.py`: walk/bike time + groceries, cached, billing cap set | Freddy | 6:00 PM | todo |
 | 5 | Map UI from `reference/UCLA-Apartment-Map.html`, demo listings load | Teammate | 5:00 PM | done (Tu) |
 | 6 | `group.py`: maximin fair pick, who is least happy and why | Freddy | 8:00 PM | todo |
@@ -23,10 +23,17 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 The starter code was written before the brief, so it uses different names. Fix these as part of steps 2 to 6:
 - Done: `app/parser.py` is now `app/extract.py` with the brief's schema. `/api/parse` still returns the old Listing shape (via `to_listing_fields`) plus a new `evidence` field, until step 3.
 - `app/commute.py` becomes `app/maps_lookup.py`, caching into `cache/` instead of `data/cache.json`.
-- The group pick moves out of `app/scoring.py` into `app/group.py`.
-- `app/models.py`: laundry `in_unit | shared | none | unknown`, parking `included | paid | none | unknown`.
-- Scoring: weights re-normalized to sum to 1; criteria are rent per person, commute, laundry, parking, bedroom fit.
-- `data/demo_listings.json`: rebuilt by Tu from the 12 listings in `reference/UCLA-Apartment-Map.html`, still in the current shape (`price` + `price_type`, laundry `in_building`, parking `extra_cost`). Freddy: convert it when `models.py` changes; `static/app.js` already reads `rent_total_monthly`, `shared`, `paid` and `available_from`.
+- Done: group pick moved to `app/group.py` (same response shape; step 6 extends it).
+- Done: `app/models.py` uses the brief's names (`rent_total_monthly`, laundry `shared`, parking `paid`). `price`/`price_type` are gone.
+- Done: scoring criteria are rent, commute, laundry, parking, bedrooms; weights re-normalized to sum to 1; unknowns excluded.
+- Done: `data/demo_listings.json` converted to the brief's names (values unchanged).
+
+## For Tu (map UI), from step 3
+- Rename the "walk" slider to "commute". The backend still accepts `walk` for now.
+- Replace the "grocery" slider with "bedrooms" (enough bedrooms for everyone). The backend ignores `grocery`, so that slider does nothing; until then the bedrooms weight defaults to 3.
+- Breakdown rows now carry `criterion`, `raw_value`, `criterion_score`, `weight` (0-1), `contribution`, `points_lost`, `unknown`. `factor` still works but is the old name.
+- Each roommate result and each ranking row has `partial_data: true` when some facts are unknown. Worth a small "partial data" badge on the card.
+- `/api/parse` now returns the brief's names plus `evidence` (exact quotes). Showing the quote on hover would help with judges.
 
 ## Missing inputs
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.

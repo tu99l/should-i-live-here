@@ -1,50 +1,57 @@
-"""Data shapes shared by the parser, the scoring code and the API.
+"""Data shapes shared by extraction, scoring, the group pick and the API.
 
-Any field can be None, which the app shows as "unknown". We never guess a value.
+Field names follow the extraction schema in CLAUDE.md. Any fact can be None (or "unknown"),
+which the app shows as "unknown". We never guess a value.
 """
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-PriceType = Literal["whole_unit", "per_room", "per_bed", "unknown"]
-Laundry = Literal["in_unit", "in_building", "none", "unknown"]
-Parking = Literal["included", "extra_cost", "none", "unknown"]
+Laundry = Literal["in_unit", "shared", "none", "unknown"]
+Parking = Literal["included", "paid", "none", "unknown"]
 
 
-class ListingFields(BaseModel):
-    """What Gemini extracts from pasted listing text. Only facts stated in the text."""
+class ListingFacts(BaseModel):
+    """Facts read from the listing text (see extract.py). Only what the text states."""
 
-    title: Optional[str] = Field(None, description="Short name for the listing, e.g. '2BR on Gayley Ave'")
-    address: Optional[str] = Field(None, description="Street address as written in the listing")
-    price: Optional[float] = Field(None, description="Monthly rent in US dollars, exactly as listed")
-    price_type: PriceType = Field("unknown", description="Whether the price is for the whole unit, one room, or one bed")
+    address: Optional[str] = None
+    rent_total_monthly: Optional[float] = Field(None, description="Monthly rent for the whole unit, US dollars")
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     laundry: Laundry = "unknown"
     parking: Parking = "unknown"
-    red_flags: list[str] = Field(default_factory=list, description="Scam or pricing warning signs stated or implied by the text")
+    utilities_included: Optional[bool] = None
+    available_from: Optional[str] = Field(None, description="YYYY-MM-DD")
 
 
-class Listing(ListingFields):
-    """A listing plus facts that come from map APIs, not from the model."""
+class Listing(ListingFacts):
+    """A listing plus facts from map APIs (never from the model)."""
 
     id: str
+    title: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
     walk_minutes: Optional[float] = None
     bike_minutes: Optional[float] = None
     grocery_walk_minutes: Optional[float] = None
+    red_flags: list[str] = Field(default_factory=list)
     evidence: dict[str, str] = Field(default_factory=dict, description="Exact quote from the listing for each extracted fact")
 
 
 class Weights(BaseModel):
-    """How much each factor matters to one roommate, from 0 (don't care) to 5 (deal-breaker)."""
+    """How much each criterion matters to one roommate, 0 (don't care) to 5 (deal-breaker).
+
+    Scoring re-normalizes these to sum to 1. "walk" is accepted as the old name for "commute".
+    Unknown keys (e.g. an old "grocery" slider) are ignored.
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     rent: float = Field(3, ge=0, le=5)
-    walk: float = Field(3, ge=0, le=5)
+    commute: float = Field(3, ge=0, le=5, validation_alias=AliasChoices("commute", "walk"))
     laundry: float = Field(3, ge=0, le=5)
     parking: float = Field(3, ge=0, le=5)
-    grocery: float = Field(3, ge=0, le=5)
+    bedrooms: float = Field(3, ge=0, le=5)
 
 
 class Roommate(BaseModel):
