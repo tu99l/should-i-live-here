@@ -138,3 +138,23 @@ def test_rent_per_person_is_computed_in_code():
     assert extract.rent_per_person(None, 3) is None
     with pytest.raises(ValueError):
         extract.rent_per_person(4550, 0)
+
+
+def test_rejected_quote_triggers_one_retry_and_merges(monkeypatch):
+    # First reply adds a word to the rent quote (seen live: "2 bed $7,150 hold"); second reply is clean.
+    bad = reply(evidence={"rent_total_monthly": "Rent is $4,550/month hold"})
+    calls = fake_gemini(monkeypatch, [bad, reply()])
+    e = extract.extract_listing(LISTING)
+    assert len(calls) == 2
+    assert e.rent_total_monthly == 4550
+    assert e.rejected == []
+
+
+def test_fact_rejected_twice_stays_unknown(monkeypatch):
+    bad = reply(evidence={"rent_total_monthly": "Rent is $4,550/month hold"})
+    calls = fake_gemini(monkeypatch, [bad, bad])
+    e = extract.extract_listing(LISTING)
+    assert len(calls) == 2
+    assert e.rent_total_monthly is None
+    assert e.rejected == ["rent_total_monthly"]
+    assert e.bedrooms == 3  # Other facts are still kept.

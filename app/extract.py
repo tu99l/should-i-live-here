@@ -29,7 +29,7 @@ FACT_FIELDS = [
 ]
 
 # Bump this when the prompt changes, so old cached replies are not reused.
-PROMPT_VERSION = "extract-v1"
+PROMPT_VERSION = "extract-v2"
 
 EXTRACT_PROMPT = """You extract facts from a rental listing for students. Return JSON only.
 
@@ -43,7 +43,9 @@ Rules:
 - parking: "included", "paid" (extra monthly cost), "none", else "unknown".
 - available_from: YYYY-MM-DD only if the listing gives a full date including the year, else null.
 - evidence: for EVERY field you fill in, copy the exact words from the listing that state it,
-  character for character (a short phrase, under 20 words). Leave evidence null for null fields.
+  character for character (a short phrase, under 20 words). Include the label or nearby words so
+  the quote shows what it is about: "Parking None", not just "None". Do not add or change any
+  words, symbols or punctuation. Leave evidence null for null fields.
 
 Listing text:
 """
@@ -191,24 +193,48 @@ def _call_gemini(text: str) -> str:
     return response.text or ""
 
 
+def merge_attempts(attempts: list[Extracted]) -> Extracted:
+    """Keep every fact that passed the check in any attempt. Earlier attempts win ties.
+
+    Every kept fact still has its own verified quote, so nothing unchecked gets in.
+    """
+    merged = attempts[0].model_copy(deep=True)
+    for later in attempts[1:]:
+        for field, quote in later.evidence.items():
+            if field not in merged.evidence:
+                setattr(merged, field, getattr(later, field))
+                merged.evidence[field] = quote
+    merged.rejected = [f for f in FACT_FIELDS
+                       if f not in merged.evidence and any(f in a.rejected for a in attempts)]
+    return merged
+
+
 def extract_listing(text: str) -> Extracted:
-    """Pasted text -> checked facts. Cached by input; malformed replies are retried once."""
+    """Pasted text -> checked facts. Cached by input.
+
+    Gemini is asked a second time (once only) if its reply is malformed or any quote fails the check.
+    """
     key = f"{PROMPT_VERSION}|{_model()}|{text}"
     cached = cache.get("extract", key)
     if cached is not None:
         return Extracted.model_validate(cached)
 
+    attempts: list[Extracted] = []
     for _attempt in range(2):
         raw = _call_gemini(text)
         try:
-            result = validate_reply(raw, text)
+            attempts.append(validate_reply(raw, text))
         except ValidationError:
             continue
-        cache.put("extract", key, result.model_dump())
-        return result
+        if not attempts[-1].rejected:
+            break
 
-    # Two malformed replies: show everything as unknown rather than guess. Not cached, so it can retry later.
-    return Extracted(rejected=["malformed_reply"])
+    if not attempts:
+        # Two malformed replies: show everything as unknown rather than guess. Not cached, so it can retry later.
+        return Extracted(rejected=["malformed_reply"])
+    result = merge_attempts(attempts)
+    cache.put("extract", key, result.model_dump())
+    return result
 
 
 def to_listing_fields(e: Extracted) -> dict:
