@@ -111,16 +111,17 @@ def test_partial_data_is_flagged_in_the_ranking():
 
 
 def test_changing_one_roommates_weights_can_flip_the_pick():
-    # The demo story with the map's default roommates: Alex (the saver) lowers "rent" from 5 to 3,
-    # and the fair pick moves from 424 Landfair (cheapest) to 1824 Fairburn (in-unit laundry).
+    # The demo story with the map's default roommates and real Google walk times:
+    # Sam raises "laundry" from 3 to 5, and the fair pick moves from 424 Landfair (shared laundry)
+    # to 1824 Fairburn (in-unit laundry). If demo data changes, rerun the search and update this.
     data = json.loads((Path(__file__).parent.parent / "data" / "demo_listings.json").read_text())
     listings = [Listing(**d) for d in data]
-    others = [person("Sam", budget=1900, rent=2, commute=5, laundry=3, parking=4, bedrooms=3),
-              person("Jordan", budget=1700, rent=3, commute=3, laundry=5, parking=2, bedrooms=3)]
+    alex = person("Alex", budget=1500, rent=5, commute=2, laundry=3, parking=1, bedrooms=3)
+    jordan = person("Jordan", budget=1700, rent=3, commute=3, laundry=5, parking=2, bedrooms=3)
 
-    def pick(alex_rent):
-        alex = person("Alex", budget=1500, rent=alex_rent, commute=2, laundry=3, parking=1, bedrooms=3)
-        return decide(listings, [alex] + others)["pick"]["listing_id"]
+    def pick(sam_laundry):
+        sam = person("Sam", budget=1900, rent=2, commute=5, laundry=sam_laundry, parking=4, bedrooms=3)
+        return decide(listings, [alex, sam, jordan])["pick"]["listing_id"]
 
-    assert pick(5) == "landfair-424"
-    assert pick(3) == "fairburn-1824"
+    assert pick(3) == "landfair-424"
+    assert pick(5) == "fairburn-1824"

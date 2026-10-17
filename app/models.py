@@ -33,7 +33,9 @@ class Listing(ListingFacts):
     lng: Optional[float] = None
     walk_minutes: Optional[float] = None
     bike_minutes: Optional[float] = None
-    grocery_walk_minutes: Optional[float] = None
+    grocery_walk_minutes: Optional[float] = Field(None, description="Real walk time to the nearest grocery store")
+    grocery_count: Optional[int] = Field(None, description="Grocery stores within 1 km, straight line")
+    nearest_grocery: Optional[str] = None
     red_flags: list[str] = Field(default_factory=list)
     evidence: dict[str, str] = Field(default_factory=dict, description="Exact quote from the listing for each extracted fact")
 

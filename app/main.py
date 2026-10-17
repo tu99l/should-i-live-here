@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-from . import commute, extract, group  # noqa: E402  (imports read .env, so load it first)
+from . import extract, group, maps_lookup  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -43,8 +43,9 @@ def parse_listing(req: ParseRequest) -> Listing:
         **facts.model_dump(exclude={"rejected"}),
     )
     if listing.address:
-        listing.walk_minutes = commute.travel_minutes(listing.address, "WALK")
-        listing.bike_minutes = commute.travel_minutes(listing.address, "BICYCLE")
+        # Distances, map position and groceries come from Google Maps, never from the model.
+        for field, value in maps_lookup.lookup({"address": listing.address}).items():
+            setattr(listing, field, value)
     return listing
 
 

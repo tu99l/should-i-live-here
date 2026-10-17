@@ -10,9 +10,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# API response cache (may contain addresses; rebuilt automatically)
-data/cache.json
-
 # macOS
 .DS_Store
 
