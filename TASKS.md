@@ -52,6 +52,13 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
 - [ ] Thumbnail (5:3).
 - Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
 
+**Optional prize: MLH "Best Domain Name from GoDaddy Registry"** (from the brief; nothing done yet; whoever has time):
+- [ ] Ask MLH (their table or the event Discord) for the free GoDaddy Registry domain code and the rules.
+- [ ] Register a creative name (ideas, availability not checked: shouldilivehere, fairestpick, roomiefair, fairsplit).
+- [ ] Our app runs on a laptop, so forward the domain to the GitHub page (https://github.com/tu99l/should-i-live-here)
+      or the demo video, using the registrar's forwarding setting (no code).
+- [ ] On Devpost, opt into the challenge and list the domain; add it to the README's Team section.
+
 ## Live demo script: Freddy + Tu with real phones (Tu, Oct 18). Record by ~9 AM, submit by 11 AM
 **Setup (Freddy's laptop only: it has the keys, and the bot runs on one laptop).** Three terminal tabs, leave them running:
 `.venv/bin/uvicorn app.main:app --port 8000` · `.venv/bin/python -m app.photon_bot` · `.venv/bin/python scripts/share_link.py`.
