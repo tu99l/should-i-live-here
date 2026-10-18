@@ -45,15 +45,37 @@ HELP = ("Text me what you want in a place, in your own words, e.g. \"close to a 
 # ---------- Roommates and saved state ----------
 
 def load_roster() -> dict:
-    """{"roommates": [{name, phone, budget, weights...}]}. Local file if present, else the example."""
+    """{"roommates": [{name, phone, email, line, budget, weights...}]}. Local file if present, else the example.
+
+    The website adds people here (invite_roommate), so the bot re-reads it on every check.
+    """
     path = ROSTER_FILE if ROSTER_FILE.exists() else ROSTER_EXAMPLE
     return json.loads(path.read_text())
+
+
+def save_roster(roster: dict) -> None:
+    ROSTER_FILE.write_text(json.dumps(roster, indent=2) + "\n")
 
 
 def phone_key(handle: str) -> str:
     """Compare phone numbers by digits only, so "+1 (424) ..." and "+1424..." match."""
     digits = "".join(c for c in handle if c.isdigit())
     return digits if digits else handle.strip().casefold()
+
+
+def normalize_phone(raw: str) -> str:
+    """Any way people type a number -> "+14245550100" (the format Photon needs). US numbers may skip the +1."""
+    digits = "".join(c for c in raw if c.isdigit())
+    if len(digits) == 10 and not raw.strip().startswith("+"):
+        digits = "1" + digits
+    if not 8 <= len(digits) <= 15 or digits.startswith("0"):
+        raise ValueError(f"That doesn't look like a phone number: {raw!r}")
+    return "+" + digits
+
+
+def _starting_roommate(entry: dict) -> Roommate:
+    """A roster entry as a Roommate (phone, email and line are contact details, not preferences)."""
+    return Roommate(**{k: v for k, v in entry.items() if k in Roommate.model_fields})
 
 
 def load_state(roster: dict) -> dict:
@@ -63,20 +85,36 @@ def load_state(roster: dict) -> dict:
             state = json.loads(STATE_FILE.read_text())
         except (OSError, json.JSONDecodeError):
             state = {}
-    saved = state.get("roommates", {})
-    roommates = {}
+    out = {"answered": state.get("answered", []), "since": state.get("since"),
+           "connected": state.get("connected", []), "roommates": {},
+           "saved": state.get("roommates", {})}
+    sync_roommates(out, roster)
+    return out
+
+
+def sync_roommates(state: dict, roster: dict) -> None:
+    """Make state["roommates"] match the roster: add people the website just invited, keep saved wishes."""
+    saved = state.setdefault("saved", {})
+    current = {}
     for entry in roster["roommates"]:
-        base = Roommate(**{k: v for k, v in entry.items() if k != "phone"})
-        roommates[base.name] = Roommate(**saved[base.name]) if base.name in saved else base
-    return {"answered": state.get("answered", []), "since": state.get("since"), "roommates": roommates}
+        name = entry["name"]
+        if name in state["roommates"]:
+            current[name] = state["roommates"][name]
+        elif name in saved:
+            current[name] = Roommate(**saved[name])
+        else:
+            current[name] = _starting_roommate(entry)
+    state["roommates"] = current
 
 
 def save_state(state: dict) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    roommates = {**state.get("saved", {}), **{n: r.model_dump() for n, r in state["roommates"].items()}}
     STATE_FILE.write_text(json.dumps({
         "answered": state["answered"][-500:],
         "since": state["since"],
-        "roommates": {n: r.model_dump() for n, r in state["roommates"].items()},
+        "connected": state.get("connected", []),
+        "roommates": roommates,
     }, indent=2))
 
 
@@ -161,7 +199,7 @@ def handle_text(name: str, text: str, state: dict, roster: dict, listings: list[
         return f"Hi {name}! " + HELP
     if command == "reset":
         entry = next(e for e in roster["roommates"] if e["name"] == name)
-        roommates[name] = Roommate(**{k: v for k, v in entry.items() if k != "phone"})
+        roommates[name] = _starting_roommate(entry)
         return f"Cleared your wishes, {name}. Back to your starting priorities.\n\n" + \
             pick_summary(run_decision(list(roommates.values()), listings), name)
     if command in ("pick", "status", "results"):
@@ -169,7 +207,7 @@ def handle_text(name: str, text: str, state: dict, roster: dict, listings: list[
 
     w = wishes.parse_wishes(text)
     if w.is_empty():
-        return "I couldn't find any apartment wishes in that. " + HELP
+        return "Tell me what matters to you in a place. " + HELP
     roommates[name] = wishes.apply_wishes(roommates[name], w)
     parts = [f"Got it, {name}: " + "; ".join(wishes.describe(w)) + "."] if wishes.describe(w) else []
     if w.cannot_check:
@@ -219,6 +257,34 @@ class Photon:
                     raise
         r.raise_for_status()
 
+    def assign(self, phone: str, first_name: str, email: Optional[str] = None) -> str:
+        """Add someone to our shared iMessage line. Returns the number THEY should text.
+
+        Each person can get a different number from Photon's pool. With an email, Photon also
+        sends them an invite. Already added -> their existing number (no second seat used).
+        """
+        body = {"handle": phone, "firstName": first_name[:100]}
+        if email:
+            body["email"] = email
+        r = self.http.post(f"/projects/{self.project}/platforms/imessage/assignments", json=body,
+                           headers={"Idempotency-Key": f"silh-assign:{phone_key(phone)}"})
+        if r.is_success:
+            return r.json()["assignedPhoneNumber"]
+        existing = self.assignment_for(phone)
+        if existing:
+            return existing
+        r.raise_for_status()
+        raise RuntimeError("Photon did not return a number.")
+
+    def assignment_for(self, phone: str) -> Optional[str]:
+        """The line number someone already has, or None."""
+        r = self.http.get(f"/projects/{self.project}/platforms/imessage/assignments", params={"pageSize": 200})
+        r.raise_for_status()
+        for a in r.json().get("assignments", []):
+            if phone_key(a.get("handle", "")) == phone_key(phone):
+                return a.get("assignedPhoneNumber")
+        return None
+
     def typing(self, incoming: dict) -> None:
         """Show "..." while we look things up. Nice to have, so failures are ignored."""
         try:
@@ -235,9 +301,19 @@ def _text_of(message: dict) -> Optional[str]:
     return content.get("text") if content.get("type") == "text" else None
 
 
+def greeting(name: str, roster: dict) -> str:
+    names = [e["name"] for e in roster["roommates"]]
+    group = ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 1 else names[0]
+    return (f"Hi {name}! I'm the apartment bot for {group}. I'll find the place that's fairest for everyone.\n"
+            "What do you want in a place? Say it however you like, e.g. \"close to a gym, in-unit laundry, "
+            "need gas and water included, under $1,500\". Text \"pick\" anytime for the current pick.")
+
+
 def process(photon: Photon, state: dict, roster: dict, listings: list[Listing], log=print) -> int:
     """Answer every new text once. Returns how many were answered."""
+    sync_roommates(state, roster)  # Someone may have just been added on the website.
     phones = {phone_key(e["phone"]): e["name"] for e in roster["roommates"] if e.get("phone")}
+    connected = state.setdefault("connected", [])
     answered = 0
     for m in photon.received_since(state["since"]):
         sender = (m.get("sentBy") or {})
@@ -253,6 +329,17 @@ def process(photon: Photon, state: dict, roster: dict, listings: list[Listing], 
         log(f"<- {name or 'unknown number'}: {text}")
         if name is None:
             reply = "Hi! I don't know this number yet. Ask your group to add you to the roommate list."
+        elif name not in connected:
+            # Their first text (usually the pre-filled "Hi, it's Sam"): say hello and ask what they want.
+            connected.append(name)
+            save_state(state)
+            reply = greeting(name, roster)
+            if not wishes.quick_parse(text) and len(text.split()) > 6:  # They already said what they want.
+                try:
+                    reply += "\n\n" + handle_text(name, text, state, roster, listings)
+                    save_state(state)
+                except Exception as e:
+                    log(f"!! error handling text: {e!r}")
         else:
             photon.typing(m)
             try:
@@ -287,7 +374,7 @@ def main() -> None:
     print(f"Listening for texts to the Photon line. Roommates: {', '.join(state['roommates'])}. Ctrl+C to stop.")
     while True:
         try:
-            process(photon, state, roster, listings)
+            process(photon, state, load_roster(), listings)
         except httpx.HTTPError as e:
             print(f"Photon error, will retry: {e}", file=sys.stderr)
         time.sleep(POLL_SECONDS)
@@ -295,3 +382,64 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------- Adding a roommate from the website ----------
+
+STARTER_TEXT = "Hi, it's {name}! Let's find our apartment."
+
+
+def text_link(line: str, name: str) -> str:
+    """Opens Messages with our number and a starter text filled in. "?&body=" works on iPhone and Android."""
+    from urllib.parse import quote
+    return f"sms:{line}?&body={quote(STARTER_TEXT.format(name=name))}"
+
+
+def invite_roommate(photon: Photon, name: str, phone: str, email: Optional[str] = None,
+                    budget: Optional[float] = None) -> dict:
+    """Add (or update) a roommate: give them a seat on the iMessage line and save them in the roster.
+
+    They still send the first text (a shared line can't text first), but the website hands them a
+    one-tap link with everything filled in, and Photon emails them an invite if we have their email.
+    """
+    name = " ".join(name.split())
+    if not name:
+        raise ValueError("Name is required.")
+    phone = normalize_phone(phone)
+    line = photon.assign(phone, name, email)
+
+    roster = load_roster() if ROSTER_FILE.exists() else {"roommates": []}
+    entry = next((e for e in roster["roommates"] if e["name"].casefold() == name.casefold()), None)
+    if entry is None:  # Someone else may already use this number under another name: replace that entry.
+        entry = next((e for e in roster["roommates"] if e.get("phone") and phone_key(e["phone"]) == phone_key(phone)), None)
+    if entry is None:
+        entry = {"name": name, "budget": budget or 1500}
+        roster["roommates"].append(entry)
+    entry.update(name=name, phone=phone, line=line)
+    if email:
+        entry["email"] = email
+    if budget:
+        entry["budget"] = budget
+    save_roster(roster)
+    return {"name": name, "line": line, "text_link": text_link(line, name), "email_invite": bool(email),
+            "starter_text": STARTER_TEXT.format(name=name)}
+
+
+def roster_status() -> list[dict]:
+    """Everyone in the group for the website: who has a number, who has texted the bot, their wishes."""
+    roster = load_roster() if ROSTER_FILE.exists() else {"roommates": []}
+    state = load_state(roster)
+    out = []
+    for e in roster["roommates"]:
+        r = state["roommates"][e["name"]]
+        line = e.get("line")
+        out.append({
+            "name": e["name"],
+            "phone_last4": (e.get("phone") or "")[-4:] or None,  # The full number never leaves the server.
+            "line": line,
+            "text_link": text_link(line, e["name"]) if line else None,
+            "connected": e["name"] in state["connected"],
+            "budget": r.budget,
+            "wants": [w.model_dump() for w in r.wants],
+        })
+    return out
