@@ -1,0 +1,44 @@
+/* "Invite by text" section (static/invite.js). Uses the tokens from styles.css. */
+.optional-tag { margin-left: auto; font: 600 10.5px var(--body); color: var(--muted); text-transform: uppercase;
+                letter-spacing: .05em; }
+.step.text-step { background: var(--navy); color: var(--gold); font-size: 11px; }
+
+.invite-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.invite-form label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); font-weight: 600; min-width: 0; }
+.invite-form label.wide { grid-column: 1 / -1; }
+.invite-form input { font: 13px var(--body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px;
+                     color: var(--ink); background: #fff; min-width: 0; width: 100%; }
+.invite-form input:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; border-color: var(--blue); }
+.invite-form button { grid-column: 1 / -1; margin-top: 2px; }
+
+/* What to do next, right after adding someone */
+.invite-next { margin-top: 10px; background: var(--gold-soft); border-left: 4px solid var(--gold); border-radius: 8px;
+               padding: 10px 12px; font-size: 12.5px; line-height: 1.5; }
+.invite-next b { color: var(--navy); }
+.invite-next .line-number { font: 800 18px var(--heading); color: var(--navy); letter-spacing: .01em;
+                            font-variant-numeric: tabular-nums; user-select: all; }
+.invite-next .starter { display: block; margin: 4px 0 8px; padding: 6px 8px; background: #fff; border-radius: 6px;
+                        border: 1px solid var(--line); color: var(--ink); user-select: all; }
+.invite-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.invite-actions a, .invite-actions button { font: 600 12.5px var(--body); padding: 6px 10px; border-radius: 6px;
+                                            cursor: pointer; text-decoration: none; }
+.invite-actions a { background: var(--blue); color: #fff; }
+.invite-actions a:hover { background: var(--blue-dark); }
+.invite-actions button { background: #fff; color: var(--blue); border: 1px solid var(--blue); }
+
+/* The group as the bot sees it */
+.group-list { display: grid; gap: 6px; margin-top: 12px; }
+.group-row { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; }
+.group-row-head { display: flex; align-items: center; gap: 8px; }
+.group-row-head .who { font-weight: 700; color: var(--navy); }
+.group-row-head .digits { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chip-status { margin-left: auto; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.chip-status.waiting { background: var(--warn-soft); color: var(--warn); }
+.chip-status.in { background: #e3f3ea; color: var(--good); }
+.chip-status.none { background: var(--bg); color: var(--muted); }
+.wish-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.wish-chip { font-size: 11.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+             color: var(--ink); }
+.wish-chip.must { border-color: var(--gold); background: var(--gold-soft); }
+.group-row .resend { font-size: 11.5px; color: var(--blue); text-decoration: none; }
+.group-row .resend:hover { text-decoration: underline; }
