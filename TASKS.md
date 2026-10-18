@@ -52,6 +52,35 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
 - [ ] Thumbnail (5:3).
 - Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
 
+## Live demo script: Freddy + Tu with real phones (Tu, Oct 18). Record by ~9 AM, submit by 11 AM
+**Setup (Freddy's laptop only: it has the keys, and the bot runs on one laptop).** Three terminal tabs, leave them running:
+`.venv/bin/uvicorn app.main:app --port 8000` · `.venv/bin/python -m app.photon_bot` · `.venv/bin/python scripts/share_link.py`.
+Hard refresh (Cmd+Shift+R), extensions off. Freddy = "you" (fills in the welcome screen, his card is editable).
+Tu = the roommate who texts, from an iPhone (iMessage only).
+
+**Rehearse first.** Live listings + real wishes don't always flip the pick. Do 1–2 practice runs and lock in a
+second text that flips it reliably. Candidates: a new destination ("I bike to Santa Monica Pier"), a low budget
+("my max is $1,200"), a must-have ("in-unit laundry is a must" / "parking is a must"). Use the SAME texts in the
+real take: Gemini, Google and RentCast answers are cached, so repeats are instant and identical (and RentCast
+fetches the area only once). Between takes: "Start over" (two clicks), redo the welcome screen, re-add Tu.
+Fill in the locked texts here: first text: `______________` · flip text: `______________` · pick before/after: `____` → `____`
+
+| # | On screen | Who does what | What we say (voice-over) |
+| --- | --- | --- | --- |
+| 1 | Welcome screen | Freddy types his wishes, place UCLA, People 2, his name, "Find our place" | "Finding a place with roommates means someone always gives something up. Just say what you want, in your own words." |
+| 2 | Map with real listings | Pan the map, hover one listing | "These are real rentals near campus right now. Walk, bike and transit times come from Google Maps, nothing is guessed." |
+| 3 | "Your group" | Freddy clicks "+ Add a roommate": Tu's name + phone (don't keep the full number on screen) | "Roommates don't need an app or an account. Add them by phone." |
+| 4 | Tu's phone + Tu's card | Tu sends the first text; the bot replies with a checklist; Tu's card fills in | "Tu just texts what they want. Gemini only reads the words; our code checks every fact against the exact quote." |
+| 5 | The pick | The pick updates by itself; open "See the math" | "The fair pick is the place where the least happy roommate is happiest, and it shows who gives up what." |
+| 6 | The flip | Tu sends the flip text; the pick moves; Freddy's phone gets the "Update" text | "When anyone changes their mind, the pick re-runs and everyone gets told." |
+| 7 | Phone map link | Tu opens the link on the phone: pick, both scores, ranking | "Everyone sees the same map and the same math on their phone." |
+| 8 | Close | Back on the laptop | "Fair, not average: an average can hide one miserable roommate. We don't." |
+
+**Recording.** Laptop: Cmd+Shift+5. Phone: iPhone screen recording, or plug in and use QuickTime → New Movie
+Recording → iPhone so both are on one screen. Keep texts short (a long text can take Gemini up to a minute).
+Cards show only the last 4 digits of phone numbers. **Backup:** also record the no-phones version ("Load demo
+group": the pick, the scores, "See the math") in case live texting fails at judging.
+
 ## Code that must change to match the brief
 The starter code was written before the brief, so it uses different names. Fix these as part of steps 2 to 6:
 - Done: `app/parser.py` is now `app/extract.py` with the brief's schema. `/api/parse` still returns the old Listing shape (via `to_listing_fields`) plus a new `evidence` field, until step 3.

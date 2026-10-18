@@ -88,6 +88,8 @@ NOTES: the conversation above is REAL output of app/photon_bot.py with the demo 
 
 - **Fair, not average.** The pick is the place where the least happy person does best, and the app says who
   gives up the most and why ("Alex: 44-minute commute, −15.4 points").
+  Say Place A scores you 95, Sam 90 and Jordan 30, and Place B scores 75, 70 and 70. Both average 72, so an
+  average can't tell them apart. We pick B, because nobody is miserable.
 - **Your own words, checked.** Gemini only sorts what people say and what listings say. Our code keeps a fact only
   if its exact words appear in the text. Nothing is guessed: unknown stays "unknown".
 - **Real distances.** Walk, bike, transit and drive times, and the nearest gym or coffee shop, come from Google Maps.
@@ -147,7 +149,10 @@ NOTES: architecture (for a diagram or a "how we built it" paragraph). Who does w
 ## Try it
 
 Setup takes about 5 minutes: see **[docs/SETUP.md](docs/SETUP.md)**. With no keys at all you can load the demo
-group (Alex, Sam and Jordan, 12 real listings near UCLA) and watch the fair pick change as their priorities change.
+group (Alex, Sam and Jordan, 12 real listings near UCLA) and see the fair pick, everyone's scores and the math.
+
+Try this: load the demo group and the pick is **547 Landfair**. If Sam texts the bot "in-unit laundry is a must",
+it moves to **1824 Fairburn**, the place with in-unit laundry, and everyone else gets an "Update" text.
 
 <!--
 NOTES: demo moments that work (also in TASKS.md, checked by tests):
@@ -174,6 +179,8 @@ NOTES: honest limits worth mentioning (judges respect this):
 ## Team
 
 Freddy Paniagua (AI and backend) and Tu Luong (UI and story). Built at LA Hacks 2026, with help from Claude Code.
+
+<!-- TODO before submitting: add the Devpost link and the demo video link here. -->
 
 <!--
 NOTES: add links (GitHub/LinkedIn), the Devpost link and the demo video link here once they exist.
