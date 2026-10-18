@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from . import extract, group, maps_lookup, photon_bot, wishes  # noqa: E402  (imports read .env, so load it first)
+from . import extract, group, maps_lookup, photon_bot, rentcast, wishes  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
 from .wishes import Wishes  # noqa: E402
 
@@ -55,11 +55,15 @@ def parse_listing(req: ParseRequest) -> Listing:
         id=uuid.uuid4().hex[:8],
         title=facts.address or "Pasted listing",
         source_text=req.text,  # Kept so "does it have X?" wishes can quote it.
+        source="pasted",
         **facts.model_dump(exclude={"rejected"}),
     )
+    listing.listed_price = listing.rent_total_monthly or listing.rent_per_person_listed
+    dest = (req.destination or "").strip() or None
+    listing.commute_to = dest  # None = the default campus.
     if listing.address:
         # Distances, map position and groceries come from Google Maps, never from the model.
-        for field, value in maps_lookup.lookup({"address": listing.address}).items():
+        for field, value in maps_lookup.lookup({"address": listing.address}, dest).items():
             setattr(listing, field, value)
     return listing
 
@@ -130,3 +134,52 @@ def invite_roommate(req: InviteRequest) -> dict:
 def roommates() -> list[dict]:
     """The bot's group: who has a number, who has texted in ("connected"), and their wishes."""
     return photon_bot.roster_status()
+
+
+# ---------- Finding a place and real listings near it ----------
+
+@app.get("/api/place")
+def place(q: str) -> dict:
+    """Text like "UCLA" or "Santa Monica Pier" -> {name, formatted_address, lat, lng} from Google (cached)."""
+    found = maps_lookup.find_place(q)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Couldn't find {q!r} on the map. Try a fuller name or address.")
+    return found
+
+
+class SearchRequest(BaseModel):
+    place: str = Field("UCLA", max_length=200)  # Where the group needs to get to; listings are found around it.
+    radius_miles: float = Field(2, gt=0, le=10)
+    min_bedrooms: int = Field(1, ge=0, le=10)
+    max_rent_per_person: Optional[float] = Field(None, gt=0)
+    limit: int = Field(40, ge=1, le=100)  # Each listing shown triggers Google lookups, so keep it modest.
+
+
+@app.post("/api/search")
+def search_listings(req: SearchRequest) -> dict:
+    """Real active rentals near the group's place, from RentCast (cached per area: changing the
+    filters never costs a request). Laundry and parking come back unknown: RentCast doesn't have them.
+
+    Listings whose price looks like ONE room's price are kept but flagged (price_check, red_flags),
+    with rent per person left unknown. Walk and bike times to the place come from Google.
+    """
+    center = maps_lookup.find_place(req.place)
+    if not center:
+        raise HTTPException(status_code=404, detail=f"Couldn't find {req.place!r} on the map.")
+    try:
+        result = rentcast.search(center["lat"], center["lng"], req.radius_miles, req.min_bedrooms,
+                                 req.max_rent_per_person, req.limit)
+    except rentcast.RentCastError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    # Real walk and bike times from each listing to the place (Route Matrix, cached), for the cards.
+    shown = result["listings"]
+    origins = [{"lat": l.lat, "lng": l.lng} for l in shown]
+    is_campus = req.place.strip().casefold() in ("ucla", maps_lookup.destination().casefold())
+    dest = maps_lookup.destination() if is_campus else (center["formatted_address"] or req.place)
+    for mode, field in (("WALK", "walk_minutes"), ("BICYCLE", "bike_minutes")):
+        for listing, minutes in zip(shown, maps_lookup.commute_minutes(origins, dest, mode)):
+            setattr(listing, field, minutes)
+    for listing in shown:
+        listing.commute_to = None if is_campus else dest  # None = the default campus.
+    result["place"] = center
+    return result

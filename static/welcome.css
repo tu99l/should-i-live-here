@@ -1,0 +1,33 @@
+/* Welcome form "What are you looking for?" (static/welcome.js) and the "asked for" strip in the sidebar.
+   Uses the tokens from styles.css; sits inside Tu's navy welcome screen. */
+.welcome-ask { background: var(--panel); border-radius: 14px; padding: 16px; margin: 0 auto 22px; max-width: 640px;
+               text-align: left; display: grid; gap: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+               border-top: 4px solid var(--gold); }
+.welcome-ask-label { font: 800 16px var(--heading); color: var(--navy); }
+.welcome-ask textarea { width: 100%; height: auto; min-height: 76px; margin: 0; font: 15px/1.45 var(--body); padding: 10px 12px;
+                        border: 1px solid var(--line); border-radius: 10px; color: var(--ink); resize: vertical; }
+.welcome-ask textarea:focus-visible, .welcome-ask input:focus-visible, .welcome-ask select:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 0; border-color: var(--blue); }
+.welcome-ask-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.welcome-ask-row label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); min-width: 0; }
+.welcome-ask-row label.narrow input { width: 110px; }
+.welcome-ask-row input, .welcome-ask-row select { font: 14px var(--body); padding: 8px 10px; border: 1px solid var(--line);
+                                                  border-radius: 8px; color: var(--ink); background: var(--panel); min-width: 0; }
+.welcome-status { min-height: 1.2em; font-size: 13px; color: var(--muted); }
+.welcome-ask-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.welcome-ask .welcome-start { margin: 0; }
+.welcome-skip { font-size: 13px; color: var(--blue); text-decoration: none; }
+.welcome-skip:hover { text-decoration: underline; }
+
+/* "You asked for" strip under the destination box */
+.asked-for { margin: 10px 0 4px; padding: 10px 12px; background: var(--gold-soft); border-left: 4px solid var(--gold);
+             border-radius: 8px; font-size: 12.5px; display: grid; gap: 6px; }
+.asked-for b { color: var(--navy); font-family: var(--heading); }
+.asked-none, .asked-note { color: var(--muted); }
+.card-wishes { margin-top: 8px; }
+
+@media (max-width: 640px) {
+  .welcome-ask-row { grid-template-columns: 1fr 1fr; }
+  .welcome-ask-row label:first-child { grid-column: 1 / -1; }
+  .welcome-ask-row label.narrow input { width: 100%; }
+}

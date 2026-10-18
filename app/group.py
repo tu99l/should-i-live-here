@@ -32,7 +32,7 @@ def _reasons(result: dict) -> list[dict]:
         if b["criterion"] == "commute":  # Say where to and how, e.g. 31 min by BICYCLE to Santa Monica Pier.
             reason["commute_to"] = result.get("commute_to")
             reason["travel_mode"] = result.get("travel_mode")
-        for key in ("kind", "place_name", "evidence"):  # Their own wishes: which gym, which quote.
+        for key in ("kind", "place_name", "evidence", "needed"):  # Their own wishes: which gym, which quote.
             if b.get(key) is not None:
                 reason[key] = b[key]
         reasons.append(reason)
@@ -92,7 +92,9 @@ def decide(listings: list[Listing], roommates: list[Roommate],
     # Each roommate's own favorite (their highest score), to show where the group disagrees.
     favorites = {}
     for i, r in enumerate(roommates):
-        best = max(results, key=lambda res: _rank_value(res["per_roommate"][i]["score"]))
+        # Same rule as the pick: a red-flagged listing (e.g. a price that may be for one room) is
+        # nobody's favorite unless every listing has a flag.
+        best = max(results, key=lambda res: (not res["red_flags"], _rank_value(res["per_roommate"][i]["score"])))
         favorites[r.name] = best["listing_id"]
 
     return {

@@ -110,7 +110,30 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
-## For Freddy: make it work anywhere, not just UCLA (from Tu; backend, please review)
+## Welcome text box — done by Freddy (Tu: restyle freely)
+- Welcome screen now asks "What are you looking for?" (own words), where you need to get to, how many people,
+  your name. "Find our place →" reads the wishes (`/api/wishes`), makes them the first roommate's priorities,
+  searches real listings near the place (`/api/search`), opens the map and runs the fair pick.
+  "Skip, show the demo" keeps the old behavior. Code: `static/welcome.js`, `static/welcome.css`.
+- Sidebar shows "<name> asked for" chips (hover a chip for the exact words), and each roommate card shows its wishes.
+- Small `app.js` edits: hover cards stay hidden while a clicked listing's card is open (Freddy's request);
+  roommate cards call `wishChips(r)` when it exists.
+
+## Real listings near any place (RentCast) — done by Freddy
+- "Find real listings near here" button under the destination box (`static/search.js`): `POST /api/search`
+  `{place, radius_miles, min_bedrooms, max_rent_per_person, limit}` -> up to 40 nearest active rentals from RentCast
+  (one request per area, cached in `cache/rentcast/`; free plan = 50 requests/month, so don't change the key or clear the cache).
+  Each result has real walk/bike times to the place. Laundry and parking are always unknown (RentCast doesn't have them).
+- **Per-room trap:** some listings show one room's price with the whole house's bedroom count ("7 bed, $1,080").
+  If price per bedroom is under 40% of the area's typical (about $2,200 near UCLA), the listing gets
+  `price_check: "possible_per_room"`, `rent_total_monthly: null` (rent per person unknown, never split), `listed_price`,
+  and a red flag that the card shows. Flagged listings rank last and are never anyone's favorite.
+- New listing fields: `source` ("demo"/"pasted"/"rentcast"), `listed_price`, `price_check`, `property_type`, `square_feet`, `commute_to`.
+- "Own bathroom" wish (text: "my own bathroom"): enough bathrooms for everyone who asked, plus one shared for the rest.
+- Open question for both of us: a pick with unknown laundry/parking can beat one with known shared laundry,
+  because unknowns are excluded (the brief's rule). It is marked partial data. Change the rule or leave it?
+
+## For Freddy: make it work anywhere, not just UCLA (from Tu) — done: 1 `/api/place`, 2 `destination` in `/api/parse`, 3 `commutes_for` only reuses minutes measured to the same place, 4 prompt says "campus, school or work". 5 (currency) left as a Devpost next step.
 The page no longer assumes UCLA. Done in `static/` (works today, no backend change needed):
 - New box "Where does your group need to get to most days?" (default "UCLA"). If it's not "UCLA", the page sends
   it as `place` for every roommate whose own "Going to" box is blank, so `/api/decide` already scores commutes
