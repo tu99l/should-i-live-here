@@ -1,97 +1,181 @@
+<!--
+================================================================================================
+NOTES FOR TU (hidden on GitHub; only visible while editing this file). Written by Freddy + Claude.
+This README is our project's front page: a visitor should get what it is, why it matters and what
+it looks like in 30 seconds, like a written demo. Every section below has a short draft people
+see now, plus hidden notes with everything we built, so you can rewrite it in your own voice.
+Keep or cut anything. Setup lives in docs/SETUP.md (don't move it back here).
+The same material works for the Devpost: copy freely.
+Screenshots are in docs/images/ (taken from the real app with the demo group: no real names or numbers).
+Delete these notes when you're done (or leave them: GitHub doesn't show them).
+================================================================================================
+-->
+
 # Should I Live Here?
 
-Roommates paste apartment listings, each sets what matters to them, and the app picks the place
-that is fairest for the whole group, with the math shown. Built for LA Hacks 2026 (Applied Intelligence).
+**Find the apartment that's fairest for your whole group, not just the person who found it.**
 
-## How it decides
-1. **Gemini** reads pasted listing text and returns structured fields (rent, price type, laundry, parking, red flags). Missing facts stay "unknown".
-2. **Google Routes API** gives real walk and bike times to campus. Results are cached.
-3. **Our scoring code** gives each listing a 0–100 score per roommate from that roommate's own weights and budget.
-4. **Fairest pick** = the listing where the least-happy roommate is happiest (maximin), with ties broken by average score. The app names who gives up the most and on what.
+Everyone says what they want in their own words, by text or on the page. We check every fact,
+measure real distances, and pick the place where the least happy roommate is happiest, with the math shown.
 
-## Setup
+Built in 24 hours at LA Hacks 2026 (Applied Intelligence track).
 
-### What you need
-- A Mac with **Python 3.11+** and **Homebrew** (for the share link tool).
-- To try the iMessage bot: an **iPhone** with iMessage. The bot uses Photon's shared iMessage line, so Android
-  phones (SMS) can't reach it.
+<!--
+NOTES: pitch and hook
+- One-liner options: "Find the apartment that's fairest for everyone." / "The roommate group chat, solved."
+- The problem in our words: finding a place with roommates means someone always gives something up, and nobody
+  can see the trade-offs. Usually the loudest person or the one who found the listing wins.
+- What's new about our approach: 1) FAIRNESS, not averages (maximin: the pick is the place where the least happy
+  person scores highest). 2) Everyone talks in their own words, by iMessage, no app or account. 3) Nothing is
+  guessed: every fact comes from the listing's exact words, Google Maps, or the user; unknown stays "unknown".
+- Fairness example (great for the Devpost): Place A scores you 95, Sam 90, Jordan 30 (average 72).
+  Place B scores 75, 70, 70 (also average 72). An average can't tell them apart; we pick B, because nobody is miserable.
+-->
 
-### 1. Install
-```bash
-git clone https://github.com/tu99l/should-i-live-here.git
-cd should-i-live-here
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-brew install cloudflared        # only for the roommates' share link
-```
-On an Intel Mac, if `pip` fails building `cryptography`, run
-`.venv/bin/pip install --only-binary=cryptography cryptography` first.
+![The map with real listings, the fairest pick and everyone's scores](docs/images/map-and-pick.png)
 
-### 2. Add your keys to `.env`
-Open it with `open -e .env`, paste each key after its `=`, and save. `.env` is git-ignored: **never commit it or
-paste keys into chat**. Every key is optional; each one turns on more of the app.
+## How it works
 
-| Key | Where to get it | What it turns on |
+1. **Say what you're looking for.** "Under $1,600 each, in-unit laundry, close to a gym, my own bathroom."
+2. **See real listings near where you go.** Active rentals around your campus or office, on a map.
+3. **Add your roommates by phone.** They text our iMessage bot whatever they want; their card fills in.
+4. **Get the fairest pick.** It updates by itself as people text, and everyone gets a link to the map.
+
+<!--
+NOTES: the full flow (all tested on real phones on Oct 17)
+1. Welcome screen (docs/images/welcome.png): "What are you looking for?" + where you go most days (default UCLA)
+   + how many people + your name. Gemini reads the words; our code keeps only what's backed by their exact words.
+2. Map: real active rentals from RentCast around that place (one request returns up to 500; near UCLA we got 500
+   within 2 miles), filtered to enough bedrooms for the group and within budget, the 40 nearest shown, plus 12 demo
+   listings. Every listing gets real walk/bike/transit/drive times from Google.
+3. "Your group" (docs/images/group-cards.png): one card per person. "+ Add a roommate" = name + phone. They send one
+   text from an iPhone to our Photon number (a shared line can't text first). The bot replies with a checklist.
+   Every text after that adds to or changes their wishes ("actually I need parking", "don't need a gym anymore").
+4. The pick re-runs on its own. When someone's text changes it, everyone else gets an "Update" text (at most one
+   per person every 3 minutes) with a view-only map link that works on any phone (docs/images/phone-share.png).
+- Commands people can text: "pick" (current pick + link), "reset" (clear their wishes), "help".
+- Photos get "I can only read text for now".
+-->
+
+| Say what you want | Everyone's card fills in from their texts | Roommates see the map on their phones |
 | --- | --- | --- |
-| *(none)* | | The 12 demo listings near UCLA, "Load demo group", the scoring and fair pick, short texts like "laundry 5, rent 3" |
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com) | Reading wishes in people's own words, reading pasted listings, the plain-English summary |
-| `GOOGLE_MAPS_API_KEY` | Google Cloud console: enable **Routes API** and **Places API (New)**, and set a billing cap first | Walk/bike/transit times to anywhere, "near a gym"-style wishes, finding any place by name |
-| `RENTCAST_API_KEY` | [rentcast.io](https://www.rentcast.io/api): free **Developer** plan (50 requests/month), then activate it in the API dashboard | "Find real listings near here" and the welcome screen's live search. Each area is fetched once and cached; the app stops at 45 new areas a month (`RENTCAST_MONTHLY_CAP`) so you're never charged |
-| `PHOTON_API_KEY` + `PHOTON_PROJECT_ID` | [Photon dashboard](https://app.beta.photon.codes): your project's id and **API keys** | Adding roommates by phone and the iMessage bot |
+| ![Welcome screen](docs/images/welcome.png) | ![Group cards](docs/images/group-cards.png) | ![Share page on a phone](docs/images/phone-share.png) |
 
-Every Gemini, Google and RentCast answer is saved in `cache/`, so anything already looked up works again with no
-network and no cost.
+### A real conversation with the bot
 
-### 3. Run it
-Use one terminal tab per line, from the project folder:
-```bash
-.venv/bin/uvicorn app.main:app --port 8000      # the website: http://localhost:8000
-.venv/bin/python -m app.photon_bot              # the iMessage bot (needs the Photon keys)
-.venv/bin/python scripts/share_link.py          # the roommates' view-only link (needs cloudflared)
-```
-- The website opens on the welcome screen. Add `#app` to the address to skip it.
-- `share_link.py` prints a link like `https://<random>.trycloudflare.com/share/<secret>`. The page also shows it
-  under the pick, and the bot texts it. The `<random>` part changes every time it starts, so start it once and
-  leave it running. Through that link only the view-only results page answers; nothing can be edited or cost money.
-- Run the bot on **one laptop only**: the group lives in that laptop's `data/group.local.json`.
+> **Sam:** Hi, it's Sam! Let's find our apartment.
+>
+> **Bot:** Hi Sam! I'm the apartment bot for Alex, Sam & Jordan. I'll find the place that's fairest for everyone.
+> Tell me in your own words: your max rent, own bedroom or bathroom, laundry and parking, what you want nearby,
+> where you go most days and how, anything that's a deal-breaker. You can text again anytime.
+>
+> **Sam:** max $1,900, in-unit laundry is a must, and I'd love a coffee shop nearby
+>
+> **Bot:** Got it, Sam: rent: important; in-unit laundry: must-have; near a coffee shop: important; budget $1,900/mo.
+> Fairest pick for Alex, Sam & Jordan: 1615 Greenfield Ave (Unit 9), $1,598 each. You: 79.2/100.
+> Least happy: Alex (74.9), mostly because of a 44-minute commute and rent at $1,598 each.
+> Your wishes there: coffee shop: Way Home Coffee, 5.3 min walk. See the map and everyone's scores: [link]
 
-### 4. Try it with a roommate
-1. Welcome screen: say what you want, where you go, how many people, your name.
-2. "+ Add a roommate": their name and phone number.
-3. They text anything to the number shown, from their iPhone's Messages app. The bot answers with a checklist.
-4. Whatever they text fills their card and updates the pick. Text "pick" for the current pick and the map link.
+<!--
+NOTES: the conversation above is REAL output of app/photon_bot.py with the demo group (Oct 17), lightly shortened
+(the welcome checklist is a bulleted list in the actual text). Other real replies we've seen:
+- "Can't check "safe neighborhood": no listing or map shows that, so it's not scored."   (we never guess)
+- "Update: Freddy changed what they want, and the fairest pick is now 11330 Ohio Ave. See the map: <link>"
+- "Hi! I don't know this number yet. Ask your group to add you to the roommate list."
+-->
 
-### Demo-day checklist
-- Start all three commands above before judging and keep them running (they stop if the terminal closes).
-- Use the demo laptop with browser extensions off (ad blockers can block the map), and hard refresh (Cmd+Shift+R).
-- "Load demo group" gives Alex, Sam and Jordan for a demo without phones. Demo moments are in `TASKS.md`.
-- Gemini can occasionally take a minute to read a long text; short texts ("laundry 5") are instant.
+## What makes it different
 
-### Troubleshooting
-| You see | Why, and what to do |
+- **Fair, not average.** The pick is the place where the least happy person does best, and the app says who
+  gives up the most and why ("Alex: 44-minute commute, −15.4 points").
+- **Your own words, checked.** Gemini only sorts what people say and what listings say. Our code keeps a fact only
+  if its exact words appear in the text. Nothing is guessed: unknown stays "unknown".
+- **Real distances.** Walk, bike, transit and drive times, and the nearest gym or coffee shop, come from Google Maps.
+- **No app, no account.** Roommates just text. The results open as a link on any phone.
+
+<!--
+NOTES: details judges like (Technical Depth / Originality). All of these are our own code, not a model call:
+- Gemini never produces a score, a ranking or a distance (a project rule). It extracts; code validates every quote
+  against the original text (and numbers must appear inside the quote) and throws out anything unbacked.
+- "Near X" works for anything: gym, Trader Joe's, a dog park, Chipotle, a baseball field. Google finds the nearest
+  one to EACH listing and the real walk there. Common words use Google's place types so "gym" finds gyms, not karate.
+- "Listing has X" (gas included, pets allowed, A/C): answered only with a quote from the listing ("no pets",
+  "window A/C"), else unknown.
+- Specific asks count strictly: "in-unit laundry" means shared laundry scores 0 for that person.
+- Budgets matter even below market: rent scores full at 75% of budget and zero at 2x budget (near UCLA a typical
+  3-bedroom is ~$2,000/person, so a $1,000 budget would otherwise make every listing score zero).
+- The per-room trap: some listings show one room's price with the whole house's bedrooms ("7 bed, $1,080"). If price
+  per bedroom is under 40% of the area's typical, we flag it, keep the listed price, and never split it.
+- A pick that doesn't state rent, bedrooms or bathrooms is flagged "⚠ check the listing" with the fairest fully known
+  alternative next to it.
+- Unknown facts are left OUT of a score (weights re-normalized), never filled in, and the listing is marked "partial data".
+- Weights from words: must 5, important 4.5, wanted 4, neutral 3, nice to have 2, don't care 0.
+- Scoring scales: commute full at 10 min, zero at 40; "near X" full at 5 min, zero at 25; laundry in-unit 1 /
+  shared 0.4 / none 0; parking included 1 / paid 0.5 / none 0; enough bedrooms 1 else 0; own bathroom = one each
+  for those who asked plus one shared.
+-->
+
+## Built with
+
+| Part | What it does |
 | --- | --- |
-| "iMessage is not set up" | `PHOTON_API_KEY` / `PHOTON_PROJECT_ID` missing from this laptop's `.env` |
-| The bot says "I don't know this number yet" | That phone isn't in the group: add them with "+ Add a roommate" |
-| A roommate's texts never arrive | They aren't on iMessage (Android/SMS), or weren't added before texting |
-| "Stopped to avoid charges" on a search | The monthly RentCast cap is reached; areas already searched still work |
-| "Couldn't reach Gemini / Google Maps" | No network or no key; demo data and anything cached still work |
-| The map is blank or unstyled | An ad blocker blocked the map files: turn extensions off or use a private window |
-| `Address already in use` | The app is already running in another tab (or stop it with Ctrl+C there) |
+| **Gemini** (Google AI Studio) | Reads listings and people's wishes into structured facts, each with an exact quote; writes the plain-English summary |
+| **Google Maps Platform** (Routes, Places) | Real walk/bike/transit/drive times, the nearest gym or coffee shop to each listing, finding places by name |
+| **RentCast API** | Real active rental listings around any place |
+| **Photon** (iMessage) | Roommates text the bot; the bot texts back picks and updates |
+| **Cloudflare quick tunnel** | A view-only link to the results that works on any phone |
+| **Python + FastAPI**, **Leaflet + OpenStreetMap** | Our backend (scoring, fair pick, validation, caching) and the map page |
 
-### Where things are saved (all git-ignored)
-- `data/group.local.json`: the group (people, phone numbers, wishes, listings). Phone numbers never leave this laptop
-  except to Photon.
-- `data/share.local.json`: the share link's secret part. `cache/`: saved API answers and the bot's bookkeeping.
-- "Start over" on the page clears the group; deleting `data/group.local.json` does the same.
+<!--
+NOTES: architecture (for a diagram or a "how we built it" paragraph). Who does what:
+  roommate's text -> Photon -> app/photon_bot.py -> app/wishes.py (Gemini extracts, code checks quotes)
+  listings: app/rentcast.py (live) | app/extract.py (pasted text, Gemini + quote checks) | data/demo_listings.json
+  distances: app/maps_lookup.py (Google Routes + Places, every reply cached in cache/)
+  scoring: app/scoring.py (per person, 0-100, breakdown)  ->  fair pick: app/group.py (maximin)
+  one shared group for the page and the bot: app/group_store.py (file lock so they never overwrite each other)
+  view-only link: app/share.py + scripts/share_link.py (through the tunnel ONLY the results page answers)
+  page: static/ (index.html, app.js map, group.js cards, welcome.js, search.js, share.js phone page)
+- Caching: every Gemini, Google and RentCast answer is saved, so the demo works with no internet and repeats cost $0.
+- RentCast free plan is 50 requests/month; one area = one request; we stop at 45 so we're never charged.
+- Reliability (stress-tested Oct 18): 730 requests at once with no errors; 6 programs making 300 edits at the
+  same time with none lost; hostile input (script tags, emoji, huge texts, junk numbers) handled; every route tried
+  through the public link (only the results page answers); a 100-text flood (no double texts, 2 update texts not 48);
+  Photon failures (replies retried, never sent twice); no internet (the demo still works). 132 automated tests,
+  none of which call the internet or send a text.
+-->
 
-## Tests
-```bash
-.venv/bin/python -m pytest -q
-```
-132 tests. Nothing in them calls the internet or sends a text: Gemini, Google, RentCast and Photon are all faked.
+## Try it
 
-## Notes
-The 12 demo listings in `data/demo_listings.json` are real 3-bedroom listings near UCLA from our own search
-(`reference/UCLA-Apartment-Map.html`), with real Google walk and bike times to Royce Hall and their original notes.
-Code was written with help from Claude Code.
+Setup takes about 5 minutes: see **[docs/SETUP.md](docs/SETUP.md)**. With no keys at all you can load the demo
+group (Alex, Sam and Jordan, 12 real listings near UCLA) and watch the fair pick change as their priorities change.
+
+<!--
+NOTES: demo moments that work (also in TASKS.md, checked by tests):
+- "Load demo group": the pick is 547 Landfair. Sam texting "in-unit laundry is a must" (or laundry 3 -> 5) moves it to
+  1824 Fairburn. Alex's budget $1,500 -> $1,200 moves it to 424 Landfair, the cheapest ($1,083 each).
+- Live with phones: someone texts a change, everyone else gets the "Update" text, they open the map link.
+-->
+
+## What's next
+
+- A hosted version with separate groups (a group link or code), so it runs without our laptop.
+- Laundry, parking and utilities for every live listing (our listing source doesn't include them yet).
+- Group chats, so the whole house can talk to the bot together.
+
+<!--
+NOTES: honest limits worth mentioning (judges respect this):
+- Runs on one laptop today; the share link works while that laptop runs the app.
+- iMessage only (Photon's shared line); the bot can't text someone first, so each roommate sends one text to start.
+- RentCast listings don't include laundry, parking or descriptions; those count as unknown until someone pastes the
+  listing ("Found a place somewhere else?" on the page).
+- US dollars and US listings only.
+-->
+
+## Team
+
+Freddy Paniagua (AI and backend) and Tu Luong (UI and story). Built at LA Hacks 2026, with help from Claude Code.
+
+<!--
+NOTES: add links (GitHub/LinkedIn), the Devpost link and the demo video link here once they exist.
+The 12 demo listings are real 3-bedroom listings near UCLA from our own search (reference/UCLA-Apartment-Map.html).
+-->

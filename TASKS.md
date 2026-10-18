@@ -44,9 +44,11 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
       RentCast finds listings, Photon carries texts), what's next (hosted multi-group version, laundry/parking data).
 - [ ] Demo video (2–3 min): welcome text -> real listings -> add a roommate -> they text -> their card fills ->
       the pick flips and everyone gets the Update text -> they open the map link on their phone. Record a backup.
-- [x] README setup written by Freddy (install, keys table, the three commands, trying it with a roommate,
-      demo-day checklist, troubleshooting). Tu: update "How it decides" at the top (it still says "price type"
-      and only mentions pasting) and restyle any wording you like.
+- [ ] README: Freddy set it up as our front page with a draft in each section, 4 real screenshots
+      (docs/images/), a real bot conversation, and HIDDEN NOTES FOR TU under every heading (open README.md in an
+      editor to see them; GitHub hides them) with everything we built: numbers, scoring rules, architecture,
+      stress tests, demo moments, limits. Rewrite it in your voice; reuse it for the Devpost. Setup moved to
+      docs/SETUP.md.
 - [ ] Thumbnail (5:3).
 - Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
 
