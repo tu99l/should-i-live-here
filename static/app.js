@@ -244,7 +244,7 @@ function renderRoommates() {
     <div class="roommate">
       <div class="roommate-head">
         <input type="text" value="${esc(r.name)}" aria-label="Roommate name" onchange="roommates[${i}].name=this.value">
-        <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="50" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value; budgetsChanged()"></span>
+        <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="any" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value; budgetsChanged()"></span>
         ${roommates.length > 1 ? `<button class="remove" title="Remove ${esc(r.name)}" aria-label="Remove ${esc(r.name)}" onclick="removeRoommate(${i})">×</button>` : ""}
       </div>
       <div class="roommate-commute">
