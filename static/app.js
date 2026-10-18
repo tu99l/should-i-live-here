@@ -142,9 +142,32 @@ function commuteText(mins, place, mode) {
   return `${Math.round(mins)} min ${TRAVEL_MODES[mode] || TRAVEL_MODES.WALK} to ${place || DEFAULT_HOME.name}`;
 }
 
+// One of a roommate's own wishes, with this listing's fact: "near gym: Gym, 9 min walk", "has pets allowed: yes".
+function wishText(b) {
+  const v = b.raw_value;
+  if (b.kind === "near") {
+    const what = b.criterion.replace(/^near: /, "");
+    return `Near ${what}: ${b.unknown || v == null ? "unknown" : `${b.place_name || "nearest"}, ${Math.round(v)} min walk`}`;
+  }
+  if (b.kind === "bathroom") return `Own bathroom: ${v == null ? "unknown" : `${v} ba for ${b.needed} needed`}`;
+  const what = b.criterion.replace(/^has: /, "");
+  return `${what[0].toUpperCase() + what.slice(1)}: ${v === true ? "yes" : v === false ? "no" : "unknown"}`;
+}
+
 // ---------- Cards ----------
+// Closest grocery store someone's "near a grocery store" wish measured for this listing (Google, via /decide).
+function groceryFromWishes(l) {
+  const ranked = lastDecision?.ranking.find(r => r.listing_id === l.id);
+  const rows = (ranked?.per_roommate || []).flatMap(p => p.breakdown)
+    .filter(b => b.kind === "near" && !b.unknown && typeof b.raw_value === "number" && /grocer|market|sprouts|trader|ralphs|whole foods/i.test(b.criterion));
+  return rows.length ? rows.reduce((a, b) => (b.raw_value < a.raw_value ? b : a)) : null;
+}
+
 function groceryText(l) {
-  if (l.nearest_grocery == null && l.grocery_walk_minutes == null) return unknown;
+  if (l.nearest_grocery == null && l.grocery_walk_minutes == null) {
+    const g = groceryFromWishes(l);
+    return g ? esc(`${g.place_name || "Grocery store"}, ${minutes(g.raw_value, "walk")}`) : unknown;
+  }
   const parts = [];
   if (l.nearest_grocery) parts.push(esc(l.nearest_grocery));
   if (l.grocery_walk_minutes != null) parts.push(esc(minutes(l.grocery_walk_minutes, "walk")));
@@ -185,7 +208,8 @@ function cardHtml(l, inPopup) {
         const c = p.breakdown.find(b => b.criterion === "commute");
         const own = (p.commute_to || (p.travel_mode && p.travel_mode !== "WALK")) && c && !c.unknown && typeof c.raw_value === "number"
           ? `<div class="tip-sub">${esc(commuteText(c.raw_value, p.commute_to, p.travel_mode))}</div>` : "";
-        return `<tr><td>${esc(p.roommate)}${own}</td><td class="num">${score(p.score)}</td>
+        const wishes = p.breakdown.filter(b => b.kind).map(b => `<div class="tip-sub">${esc(wishText(b))}</div>`).join("");
+        return `<tr><td>${esc(p.roommate)}${own}${wishes}</td><td class="num">${score(p.score)}</td>
           <td>${worst && worst.points_lost > 0 ? `${esc(FACTOR_LABELS[worst.factor] || worst.factor)} (−${worst.points_lost})` : "—"}</td></tr>`;
       }).join("")}
       </table>

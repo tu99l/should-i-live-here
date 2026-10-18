@@ -34,6 +34,10 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 8. Scoring changes tonight: rent reaches zero at 2x the budget (budgets below market still matter); a stated max rent
    makes rent "important"; a pick missing rent/bedrooms/bathrooms gets a ⚠ and a fully known alternative.
 
+**Oct 18, 8 AM (Freddy, in `static/app.js`, display only, scores unchanged):** map cards now list each person's own wishes
+under their score ("Near grocery store: Bristol Farms, 4 min walk"), and the 🛒 line uses that measured store when the
+listing has none (it was "unknown" for every RentCast listing). Known gap: wishes can only be added, not removed (Start over clears them).
+
 **Stress-tested** (for the Devpost "how we built it"): 730 requests at once, two programs editing the group at the same
 time (300 edits, none lost), hostile input, every route through the public link (only the results page answers),
 a 100-text flood, Photon failures (no double texts, failed replies retried), no internet (the demo still works).
