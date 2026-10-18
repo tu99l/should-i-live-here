@@ -172,3 +172,36 @@ tr.is-pick td { font-weight: 700; color: var(--amber); }
   aside { border-left: 0; border-top: 1px solid var(--magenta); }
 }
 @media (prefers-reduced-motion: reduce) { .brand .neon-cn { animation: none; } }
+
+/* Welcome screen: full-screen layer over the app, with the map showing through a blur */
+.welcome { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; overflow-y: auto;
+           padding: 24px 16px 140px; transition: opacity .45s, transform .45s;
+           background:
+             repeating-linear-gradient(0deg, rgba(255, 255, 255, .02) 0 1px, transparent 1px 3px),
+             radial-gradient(70% 55% at 50% 30%, rgba(255, 43, 214, .22), transparent 70%),
+             radial-gradient(60% 40% at 80% 90%, rgba(25, 230, 255, .16), transparent 70%),
+             rgba(7, 5, 15, .82);
+           backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.welcome[hidden] { display: none; }
+.welcome.leaving { opacity: 0; transform: scale(1.04); pointer-events: none; }
+.welcome-inner { position: relative; z-index: 1; max-width: 760px; text-align: center; }
+.welcome-cn { display: block; font: 700 18px var(--cjk); letter-spacing: .4em; color: var(--cyan); margin-bottom: 10px;
+               text-shadow: var(--glow-c); animation: flicker 6s infinite; }
+.welcome-title { font: 700 clamp(34px, 7vw, 64px)/1.05 var(--heading); text-transform: uppercase; letter-spacing: .04em;
+                 margin: 0 0 14px; color: #fff; text-shadow: 0 0 6px #fff, 0 0 16px var(--magenta), 0 0 42px rgba(255, 43, 214, .6); }
+.welcome-pitch { font-size: 16px; line-height: 1.55; color: #cfc9ea; margin: 0 auto 26px; max-width: 520px; }
+.welcome-steps { list-style: none; padding: 0; margin: 0 auto 28px; max-width: 640px; display: grid; grid-template-columns: repeat(3, 1fr);
+                 gap: 12px; text-align: left; }
+.welcome-steps li { display: grid; gap: 8px; align-content: start; padding: 14px; background: var(--panel);
+                    border: 1px solid var(--line); border-top: 2px solid var(--cyan); font-size: 12.5px; line-height: 1.45;
+                    color: var(--muted); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); }
+.welcome-steps b { display: block; font: 700 13.5px var(--heading); color: #fff; margin-bottom: 4px; }
+.welcome-start { width: auto !important; font-size: 17px !important; padding: 14px 34px !important; }
+.welcome-foot { margin: 16px 0 0; font-size: 12px; color: #7d7499; }
+.skyline { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: clamp(120px, 19vw, 280px); pointer-events: none; }
+.skyline path, .skyline circle { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.sky-back path { stroke: rgba(25, 230, 255, .35); stroke-width: 1.5; fill: rgba(7, 5, 15, .6); }
+.sky-front path, .sky-front circle { stroke: var(--magenta); stroke-width: 2; fill: rgba(7, 5, 15, .85);
+                                     filter: drop-shadow(0 0 4px var(--magenta)) drop-shadow(0 0 10px rgba(255, 43, 214, .5)); }
+@media (max-width: 700px) { .welcome-steps { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .welcome { transition: none; } .welcome-cn { animation: none; } }

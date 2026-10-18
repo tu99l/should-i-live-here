@@ -12,6 +12,41 @@
   <link rel="stylesheet" href="/static/invite.css">
 </head>
 <body>
+  <!-- Welcome screen: covers the app until "Start". Add #app to the URL to skip it. -->
+  <div id="welcome" class="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+    <div class="welcome-inner">
+      <span class="neon-cn welcome-cn" lang="zh-Hans" aria-hidden="true">我该住这里吗？</span>
+      <h1 id="welcomeTitle" class="welcome-title">Should I Live Here?</h1>
+      <p class="welcome-pitch">Finding a place with roommates means someone always gives something up.
+        We find the apartment that's fairest for everyone, using real facts, and show the math.</p>
+      <ol class="welcome-steps">
+        <li><span class="step">1</span><div><b>Everyone says what matters</b>Rent, commute, laundry, parking, room for all. Or just text it in.</div></li>
+        <li><span class="step">2</span><div><b>We check the facts</b>Each listing is read word by word, and walk and bike times come from Google Maps. Nothing is guessed.</div></li>
+        <li><span class="step">3</span><div><b>You get the fairest pick</b>The place where the least happy roommate is happiest, and who gives up what.</div></li>
+      </ol>
+      <button class="primary welcome-start" id="welcomeStart" onclick="enterApp()">Find our place →</button>
+      <p class="welcome-foot">12 real listings near UCLA are loaded and ready. Built at LA Hacks 2026.</p>
+    </div>
+    <svg class="skyline" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <!-- Neon Shanghai skyline: towers, the Oriental Pearl Tower and the "bottle opener" -->
+      <g class="sky-back">
+        <path d="M0 220V150h40v-30h30v50h35V110h45v110zM160 220V90h30V60h20v30h25v130zM250 220v-70h55v-40h40v110zM980 220V100h40v-20h30v140zM1060 220v-90h50v40h40v-60h50v110z"/>
+      </g>
+      <g class="sky-front">
+        <!-- Oriental Pearl Tower -->
+        <path d="M455 220l18-95M505 220l-18-95M480 220V125M480 52V8"/>
+        <circle cx="480" cy="125" r="24"/><circle cx="480" cy="62" r="15"/><circle cx="480" cy="30" r="6"/>
+        <!-- Shanghai Tower (twisting) -->
+        <path d="M640 220c-6-80 4-150 22-205c14 55 20 125 16 205z"/>
+        <!-- World Financial Center (bottle opener) -->
+        <path d="M740 220V40l30-12l30 12v180z"/><path d="M757 60h26l-4 18h-18z"/>
+        <!-- Jin Mao -->
+        <path d="M560 220V80l14-30l14 30v140zM574 50V25"/>
+        <path d="M330 220v-80h50v80M820 220v-110h60v110M890 220v-60h45v60"/>
+      </g>
+    </svg>
+  </div>
+
   <div id="map"></div>
   <aside>
     <header class="brand">

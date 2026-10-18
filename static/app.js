@@ -364,6 +364,17 @@ async function parseListing() {
   }
 }
 
+// ---------- Welcome screen ----------
+function enterApp() {
+  const w = document.getElementById("welcome");
+  w.classList.add("leaving");
+  setTimeout(() => { w.hidden = true; map.invalidateSize(); }, 450);
+  if (location.hash !== "#app") history.replaceState(null, "", "#app");
+}
+// Skip the welcome screen when the URL ends in #app (handy while working on the page).
+if (location.hash === "#app") document.getElementById("welcome").hidden = true;
+else document.getElementById("welcomeStart").focus();
+
 // ---------- Start ----------
 renderRoommates();
 fetch("/api/demo")
