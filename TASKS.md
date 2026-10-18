@@ -62,6 +62,10 @@ Each roommate can now say where they need to get to and how. The backend looks u
 - In `static/app.js`, `rentPerPerson()` still checks the old `price`/`price_type`, which no longer exist. Change it to: `rent_total_monthly / roommates` if set, else `rent_per_person_listed`, else unknown. (Or use `rent_per_person` from each `/api/decide` ranking row, which already does this.)
 - Card idea: "$1,150/person (listed per bed)" so users see why it isn't split.
 
+## Known risks (decided to leave as is)
+- The page loads Leaflet (unpkg.com) and fonts (Google Fonts) from the internet. Ad blockers like uBlock Origin can block them and break the layout (seen on Freddy's browser; fixed by turning extensions off). Judges only use our laptops, so we left it. If someone else ever needs to run it: copy those files into `static/vendor/` and load them locally.
+- Demo laptop: turn off browser extensions (or use a private window) before judging, and do one hard refresh (Cmd+Shift+R).
+
 ## Missing inputs
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
