@@ -110,6 +110,19 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
+## Redesign: one group for the page and the bot (Freddy building now; Tu: please don't edit app.js, index.html, styles.css until it's pushed)
+Problem: the page and the iMessage bot each had their own group (page: Alex/Sam/Jordan in the browser with 0–5 grids;
+bot: roommates.local.json), so a roommate's texts never changed their card.
+- **One group, saved by the backend** (`data/group.local.json`, git-ignored): people, their wishes, and the group's listings.
+  The page and the bot both read and write it.
+- **Cards come from people:** you (from the welcome box) + everyone you invite. An invited person's card says
+  "Waiting for first text", then fills in by itself from their texts (wishes as chips, budget, commute). People without
+  a phone can be typed in on the page ("What does Jordan want?").
+- **No 0–5 grid as input.** Wishes set the weights. The math stays visible in the results and in "See the math" on each card.
+- **The pick updates itself** when anyone texts or changes something. The bot uses the same listings as the map (RentCast results too).
+- **"Load demo group"** fills Alex, Sam and Jordan with their usual wishes for judging (no phones needed).
+- After this: feature freeze. Fixes, polish, demo video, Devpost.
+
 ## Welcome text box — done by Freddy (Tu: restyle freely)
 - Welcome screen now asks "What are you looking for?" (own words), where you need to get to, how many people,
   your name. "Find our place →" reads the wishes (`/api/wishes`), makes them the first roommate's priorities,
