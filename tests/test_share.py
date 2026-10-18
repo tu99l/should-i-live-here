@@ -83,7 +83,7 @@ def test_pick_change_texts_everyone_else_who_has_texted_with_the_link():
             p.space_id, p.agent_id = space, ("agent" if space else None)
     share.set_public_url("https://abc-def.trycloudflare.com")
     fake = FakePhoton()
-    told = photon_bot.tell_group(photon(fake), "Alex", {"title": "1824 Fairburn Ave"}, log=lambda *_: None)
+    told = photon_bot.tell_group(photon(fake), "Alex", {"title": "1824 Fairburn Ave", "listing_id": "fairburn"}, log=lambda *_: None)
     assert told == 1  # Sam only: Alex made the change, Jordan never texted.
     space, text, key = fake.sent[0]
     assert space == "s-sam" and "Alex changed what they want" in text and "1824 Fairburn Ave" in text
@@ -103,3 +103,61 @@ def test_first_pick_is_remembered_quietly_then_changes_are_announced():
 def test_pick_reply_includes_the_link_when_sharing():
     share.set_public_url("https://abc-def.trycloudflare.com")
     assert f"See the map and everyone's scores: https://abc-def.trycloudflare.com/share/{share.code()}" in photon_bot.current_pick("Alex")
+
+
+# ---------- From stress testing: no update spam, retried replies, photos ----------
+
+def test_rapid_changes_send_one_update_then_the_newest_pick_later(monkeypatch):
+    with group_store.editing() as g:
+        for p, space in zip(g.people, ("s-alex", "s-sam", None)):
+            p.space_id, p.agent_id = space, ("agent" if space else None)
+    clock = [1000.0]
+    monkeypatch.setattr(photon_bot, "_now", lambda: clock[0])
+    fake, state = FakePhoton(), photon_bot.load_state()
+    quiet = lambda *_: None
+    photon_bot.tell_group(photon(fake), "Alex", {"title": "A", "listing_id": "a"}, quiet, state)
+    for i, pick in enumerate(["B", "C", "D"]):  # Three more changes within a minute.
+        clock[0] += 10
+        photon_bot.tell_group(photon(fake), "Alex", {"title": pick, "listing_id": pick.lower()}, quiet, state)
+    assert [t for _, t, _ in fake.sent] == [fake.sent[0][1]] and "now A" in fake.sent[0][1]  # Only the first went out.
+    clock[0] += photon_bot.UPDATE_GAP
+    photon_bot.flush_updates(photon(fake), state, quiet)
+    assert len(fake.sent) == 2 and "now D" in fake.sent[1][1]  # Then one text with the newest pick.
+
+
+def test_a_failed_reply_is_retried_with_the_same_key():
+    from tests.test_photon_bot import incoming
+    attempts = []
+
+    def flaky(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"items": [incoming("m1", "laundry 5")]})
+        body = json.loads(request.content)
+        if body["content"]["type"] == "text":
+            attempts.append(request.headers["idempotency-key"])
+            if len(attempts) <= 2:  # The sender's own two tries both fail.
+                return httpx.Response(500, json={})
+        return httpx.Response(202, json={})
+    with group_store.editing() as g:
+        g.people[0].phone, g.people[0].connected = "+14245550100", True
+    state = {"answered": [], "since": "2026-10-18T00:00:00Z"}
+    bot = photon(flaky)
+    photon_bot.process(bot, state, log=lambda *_: None)  # Photon fails: no crash, reply kept.
+    assert len(state["unsent"]) == 1
+    photon_bot.process(bot, state, log=lambda *_: None)  # Next check: retried and delivered.
+    assert state["unsent"] == [] and set(attempts) == {"silh-reply:m1"} and len(attempts) == 3
+
+
+def test_a_photo_gets_a_polite_text_only_reply():
+    from tests.test_photon_bot import incoming
+    with group_store.editing() as g:
+        g.people[0].phone, g.people[0].connected = "+14245550100", True
+    photo = {**incoming("m2", "x"), "content": {"type": "attachment", "attachmentId": "pho_att_x"}}
+    fake = FakePhoton()
+
+    def handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"items": [photo]})
+        return fake(request)
+    photon_bot.process(photon(handler), {"answered": [], "since": "2026-10-18T00:00:00Z"}, log=lambda *_: None)
+    assert fake.sent and fake.sent[0][1].startswith("I can only read text for now")

@@ -67,7 +67,10 @@ def load_state() -> dict:
             state = json.loads(STATE_FILE.read_text())
         except (OSError, json.JSONDecodeError):
             state = {}
-    return {"answered": state.get("answered", []), "since": state.get("since")}
+    return {"answered": state.get("answered", []), "since": state.get("since"),
+            "told": state.get("told", {}),      # name -> {"at": time, "pick": listing id} of their last update text
+            "pending": state.get("pending", {}),  # name -> newest pick change they haven't been told yet
+            "unsent": state.get("unsent", [])}    # replies Photon failed to send, retried each check
 
 
 def save_state(state: dict) -> None:
@@ -78,7 +81,8 @@ def save_state(state: dict) -> None:
             old = json.loads(STATE_FILE.read_text())
         except (OSError, json.JSONDecodeError):
             old = {}
-    old.update(answered=state["answered"][-500:], since=state["since"])
+    old.update(answered=state["answered"][-500:], since=state["since"], told=state.get("told", {}),
+               pending=state.get("pending", {}), unsent=state.get("unsent", [])[-100:])
     STATE_FILE.write_text(json.dumps(old, indent=2))
 
 
@@ -206,23 +210,60 @@ def changed_pick(name: str) -> Optional[dict]:
     return None if first else pick
 
 
-def tell_group(photon: "Photon", changed_by: str, pick: dict, log=print) -> int:
-    """Text everyone else who has texted the bot that the pick changed. Returns how many were told."""
-    g = group_store.read()
+def tell_group(photon: "Photon", changed_by: str, pick: dict, log=print, state: Optional[dict] = None) -> int:
+    """Queue a "the pick changed" text for everyone else who has texted the bot, then send what's due.
+
+    At most one update per person every UPDATE_GAP seconds: changes inside that window wait, and the person
+    then gets one text with the newest pick (rapid back-and-forth texting can't spam anyone).
+    Returns how many updates were sent right now.
+    """
+    own_state = state is None
+    state = state if state is not None else load_state()
+    for p in group_store.read().people:
+        if p.name != changed_by and p.space_id and p.agent_id:
+            state.setdefault("pending", {})[p.name] = {"by": changed_by, "title": pick["title"], "id": pick["listing_id"]}
+    sent = flush_updates(photon, state, log)
+    if own_state:
+        save_state(state)
+    return sent
+
+
+def flush_updates(photon: "Photon", state: dict, log=print) -> int:
+    """Send queued pick-change texts whose person hasn't had one in the last UPDATE_GAP seconds."""
+    now, sent = _now(), 0
     url = share.link()
-    told = 0
-    for p in g.people:
-        if p.name == changed_by or not (p.space_id and p.agent_id):
+    group = group_store.read()
+    for name, change in list(state.get("pending", {}).items()):
+        person = group.find(name)
+        told = state.setdefault("told", {}).get(name, {})
+        if not (person and person.space_id and person.agent_id):
+            state["pending"].pop(name)  # Left the group, or never texted: nobody to tell.
             continue
-        text = (f"Update: {changed_by} changed what they want, and the fairest pick is now {pick['title']}."
+        if told.get("pick") == change["id"]:
+            state["pending"].pop(name)  # Already told about this pick (it changed back): nothing new.
+            continue
+        if now - told.get("at", 0) < UPDATE_GAP:
+            continue  # Too soon after their last update; sent on a later check with the newest pick.
+        text = (f"Update: {change['by']} changed what they want, and the fairest pick is now {change['title']}."
                 + (f"\nSee the map: {url}" if url else "\nText \"pick\" for the details."))
         try:
-            photon.send_to(p.space_id, p.agent_id, text, key=f"silh-pick:{g.version}:{p.name}")
-            told += 1
-            log(f"-> {p.name} (update): {text}")
+            photon.send_to(person.space_id, person.agent_id, text, key=f"silh-pick:{change['id']}:{name}:{int(now)}")
         except httpx.HTTPError as e:
-            log(f"!! couldn't tell {p.name}: {e!r}")
-    return told
+            log(f"!! couldn't tell {name} yet, will retry: {e!r}")
+            continue
+        state["told"][name] = {"at": now, "pick": change["id"]}
+        state["pending"].pop(name)
+        sent += 1
+        log(f"-> {name} (update): {text}")
+    return sent
+
+
+def _now() -> float:
+    return time.time()
+
+
+UPDATE_GAP = 180  # Seconds between pick-change texts to the same person.
+UNSENT_GIVE_UP = 600  # Stop retrying a failed reply after this many seconds.
 
 
 def handle_text(name: str, text: str) -> str:
@@ -360,6 +401,8 @@ def greeting(name: str, group: group_store.Group) -> str:
 def process(photon: Photon, state: dict, log=print) -> int:
     """Answer every new text once. Returns how many were answered."""
     answered = 0
+    retry_unsent(photon, state, log)
+    flush_updates(photon, state, log)
     for m in photon.received_since(state["since"]):
         sender = (m.get("sentBy") or {})
         if m["id"] in state["answered"] or m.get("status") != "received" or sender.get("kind") != "human":
@@ -368,7 +411,17 @@ def process(photon: Photon, state: dict, log=print) -> int:
         state["answered"].append(m["id"])  # Marked first: a crash mid-reply never causes a double answer.
         state["since"] = max(state["since"], m["createdAt"])
         save_state(state)
-        if not text or (m.get("space") or {}).get("kind") != "direct":
+        if (m.get("space") or {}).get("kind") != "direct":
+            continue  # Group chats: a shared line only works one-on-one.
+        if not text:
+            content_type = (m.get("content") or {}).get("type")
+            if content_type in ("attachment", "voice", "group"):  # A photo, a voice note, or several parts.
+                known = any(p.phone and phone_key(p.phone) == phone_key(sender.get("handle", ""))
+                            for p in group_store.read().people)
+                if known:
+                    log("<- (a photo or voice note)")
+                    send_or_queue(photon, state, m, PHOTO_REPLY, log)
+                    answered += 1
             continue
         group = group_store.read()  # Fresh for every text: the page or an earlier text may have changed it.
         phones = {phone_key(p.phone): p.name for p in group.people if p.phone}
@@ -395,8 +448,7 @@ def process(photon: Photon, state: dict, log=print) -> int:
             except Exception as e:  # Never leave someone on read: say so and keep running.
                 log(f"!! error handling text: {e!r}")
                 reply = "Sorry, something went wrong looking that up. Try again in a minute."
-        photon.send_text(m, reply)
-        log(f"-> {reply}\n")
+        send_or_queue(photon, state, m, reply, log)
         answered += 1
         if name:
             person = group_store.read().find(name)
@@ -405,8 +457,45 @@ def process(photon: Photon, state: dict, log=print) -> int:
                     g.find(name).space_id, g.find(name).agent_id = m["space"]["id"], m["receivedBy"]["id"]
             pick = changed_pick(name)
             if pick:
-                tell_group(photon, name, pick, log)
+                tell_group(photon, name, pick, log, state)
+                save_state(state)
     return answered
+
+
+PHOTO_REPLY = ("I can only read text for now. Type what you want in a place (max rent, laundry, parking, "
+               "what you want nearby…), or paste the listing's words.")
+
+
+def send_or_queue(photon: Photon, state: dict, incoming: dict, text: str, log=print) -> None:
+    """Reply now; if Photon fails, keep the reply and retry on the next checks (same key = never sent twice)."""
+    try:
+        photon.send_text(incoming, text)
+        log(f"-> {text}\n")
+    except httpx.HTTPError as e:
+        log(f"!! reply not sent yet, will retry: {e!r}")
+        state.setdefault("unsent", []).append({
+            "space": incoming["space"]["id"], "agent": incoming["receivedBy"]["id"], "text": text,
+            "key": f"silh-reply:{incoming['id']}", "since": _now()})
+        save_state(state)
+
+
+def retry_unsent(photon: Photon, state: dict, log=print) -> int:
+    """Try failed replies again. Gives up after UNSENT_GIVE_UP seconds. Returns how many went out."""
+    sent, keep = 0, []
+    for u in state.get("unsent", []):
+        if _now() - u["since"] > UNSENT_GIVE_UP:
+            log(f"!! gave up on a reply after {UNSENT_GIVE_UP // 60} minutes")
+            continue
+        try:
+            photon.send_to(u["space"], u["agent"], u["text"], key=u["key"])
+            sent += 1
+            log(f"-> (retried) {u['text']}\n")
+        except httpx.HTTPError:
+            keep.append(u)
+    if sent or len(keep) != len(state.get("unsent", [])):
+        state["unsent"] = keep
+        save_state(state)
+    return sent
 
 
 def main() -> None:
