@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/invite.css">
 </head>
 <body>
   <div id="map"></div>
@@ -24,6 +25,21 @@
       <p class="hint">Set each person's max rent, where they need to get to and how, and how much each thing matters (0 = don't care, 5 = deal-breaker).</p>
       <div id="roommates"></div>
       <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
+    </section>
+
+    <section id="invite">
+      <h2><span class="step text-step">✉</span>Invite by text<span class="optional-tag">Optional</span></h2>
+      <p class="hint">Add a roommate's phone and they can text what they want in their own words, like "close to a gym, in-unit laundry". The bot texts back the fairest pick.</p>
+      <form id="inviteForm" class="invite-form" autocomplete="off">
+        <label>Name<input id="inviteName" required maxlength="60" placeholder="Sam"></label>
+        <label>Phone<input id="invitePhone" type="tel" required maxlength="30" placeholder="(424) 555-0123"></label>
+        <label>Email <span class="tip-sub">optional, sends an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@ucla.edu"></label>
+        <label>Max rent <span class="tip-sub">optional</span><input id="inviteBudget" type="number" min="1" step="50" placeholder="1500"></label>
+        <button class="secondary" id="inviteBtn" type="submit">Add to the group text</button>
+      </form>
+      <div id="inviteStatus" class="status"></div>
+      <div id="inviteNext" class="invite-next" hidden></div>
+      <div id="groupList" class="group-list"></div>
     </section>
 
     <section>
@@ -44,5 +60,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/invite.js"></script>
 </body>
 </html>

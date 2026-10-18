@@ -81,9 +81,13 @@ Roommates can now ask for anything in their own words, by iMessage or (optionall
   in `.env`. Add roommates from the page (see the next section); they are saved in the git-ignored
   `data/roommates.local.json`. Commands by text: "pick", "reset", "help".
 
-## For Tu: "Add roommate" box on the page (new; backend done, needs UI)
+## "Invite by text" section on the page (done by Freddy, in `static/invite.js` + `static/invite.css`; Tu: restyle freely)
 Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage line can't text first
 (only the $250/month Business plan can), so the roommate sends ONE pre-filled text; the bot replies right away.
+- Built: form (name, phone, optional email and max rent), "last step" box with the number, the pre-filled
+  message, an "Open in Messages" link and a copy button, and a live group list (polls every 4 s) with
+  "Waiting for first text" / "Texting" and each person's texted wishes as chips. Not built: a QR code
+  (would need a QR library, so ask first). `app.js` and `styles.css` were not touched; `index.html` got the section.
 - Form fields: name, phone (any format), email (optional), max rent (optional).
 - `POST /api/roommates/invite` with `{"name", "phone", "email"?, "budget"?}` returns
   `{name, line, text_link, starter_text, email_invite}`. Errors come back as `{"detail": "..."}` (400 bad number, 502 Photon).
