@@ -107,3 +107,8 @@
 .pick-warning { margin-top: 6px; color: var(--warn); font-weight: 600; font-size: 13px; }
 .pick-alt { margin-top: 4px; font-size: 13px; }
 .pick-alt a { color: var(--blue); font-weight: 700; }
+
+/* Second click needed to remove someone */
+.remove.confirming { font: 700 11.5px var(--body); color: #fff; background: var(--warn); border-radius: 999px;
+                     padding: 3px 10px; }
+.remove.confirming:hover { color: #fff; filter: brightness(1.08); }

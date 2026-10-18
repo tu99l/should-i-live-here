@@ -16,6 +16,8 @@
   let group = null;
   let busy = false;          // An edit is in flight: don't redraw over the person typing.
   const notes = {};          // Per-person note after adding wishes ("Can't check 'quiet street'").
+  let confirmRemove = null;  // {name, until}: the × was clicked once; a second click within 4 s removes them.
+  const CONFIRM_MS = 4000;
 
   // Same words as the bot's replies (LEVEL_NAMES in app/wishes.py). Something a person asked for
   // ("near a gym") is never "neutral": 3 was "wanted" before weights moved up on Oct 17.
@@ -93,7 +95,9 @@
         <span class="person-name">${name}</span>
         ${p.phone_last4 ? `<span class="digits">•••• ${h(p.phone_last4)}</span>` : ""}
         ${status(p)}
-        ${p.me ? "" : `<button class="remove" title="Remove ${name}" aria-label="Remove ${name}" data-act="remove">×</button>`}
+        ${p.me ? "" : (confirmRemove?.name === p.name && Date.now() < confirmRemove.until
+          ? `<button class="remove confirming" aria-label="Click again to remove ${name}" data-act="remove">Remove ${name}?</button>`
+          : `<button class="remove" title="Remove ${name}" aria-label="Remove ${name}" data-act="remove">×</button>`)}
       </div>
       ${facts}
       ${wishes ? `<div class="wish-chips">${wishes}</div>` : `<div class="person-empty">${empty}</div>`}
@@ -184,9 +188,20 @@
     if (!cardEl || !t.dataset.act) return;
     act(+cardEl.dataset.i, t.dataset.act, t.value);
   });
+  // Removing someone takes two clicks, so one misclick mid-demo can't drop a person.
   el("roommates").addEventListener("click", e => {
     const t = e.target.closest("[data-act=remove]");
-    if (t) act(+t.closest(".person").dataset.i, "remove");
+    if (!t) return;
+    const i = +t.closest(".person").dataset.i;
+    const name = group.people[i].name;
+    if (confirmRemove?.name === name && Date.now() < confirmRemove.until) {
+      confirmRemove = null;
+      act(i, "remove");
+      return;
+    }
+    confirmRemove = { name, until: Date.now() + CONFIRM_MS };
+    renderGroup();
+    setTimeout(() => { if (confirmRemove?.name === name && Date.now() >= confirmRemove.until) { confirmRemove = null; renderGroup(); } }, CONFIRM_MS + 50);
   });
   el("roommates").addEventListener("submit", e => {
     e.preventDefault();
