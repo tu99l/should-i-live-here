@@ -247,6 +247,18 @@
 
   async function loadDemo(e) {
     e.preventDefault();
+    const link = el("loadDemo");
+    // Two clicks when it would replace real people (no pop-up); one click on an empty group.
+    if (group?.people.length && link.dataset.sure !== "yes") {
+      link.dataset.sure = "yes";
+      link.textContent = "Click again to replace your group with the demo";
+      link.classList.add("confirming-link");
+      setTimeout(() => { link.dataset.sure = ""; link.textContent = "Load demo group"; link.classList.remove("confirming-link"); }, 4000);
+      return;
+    }
+    link.dataset.sure = "";
+    link.textContent = "Load demo group";
+    link.classList.remove("confirming-link");
     adopt(await api("POST", "/api/group/demo"));
     listings = await api("GET", "/api/group/listings");
     demoIds = new Set(listings.map(l => l.id));
