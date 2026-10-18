@@ -170,3 +170,34 @@ def test_find_place_returns_googles_answer_or_none(monkeypatch):
         "name": "Santa Monica Pier", "formatted_address": "200 Santa Monica Pier", "lat": 34.0, "lng": -118.5}
     assert maps_lookup.find_place("zzqx nowhere") is None
     assert maps_lookup.find_place("   ") is None
+
+
+# ---------- Hard cap on paid requests ----------
+
+def test_billing_period_starts_on_the_billing_day():
+    from datetime import date
+    assert rentcast.billing_period_start(date(2026, 10, 18), 17) == date(2026, 10, 17)
+    assert rentcast.billing_period_start(date(2026, 11, 3), 17) == date(2026, 10, 17)
+    assert rentcast.billing_period_start(date(2026, 1, 5), 17) == date(2025, 12, 17)
+    assert rentcast.billing_period_start(date(2026, 3, 1), 31) == date(2026, 2, 28)
+
+
+def test_cap_stops_new_searches_but_cached_ones_still_work(monkeypatch):
+    monkeypatch.setenv("RENTCAST_MONTHLY_CAP", "2")
+    fake = use(monkeypatch, FakeRentCast())
+    rentcast.search(34.07, -118.44, 2)
+    rentcast.search(34.08, -118.44, 2)
+    assert rentcast.usage()["requests"] == 2
+    with pytest.raises(rentcast.RentCastError, match="avoid charges"):
+        rentcast.search(34.09, -118.44, 2)
+    assert len(fake.calls) == 2  # The third was never sent.
+    assert rentcast.search(34.07, -118.44, 2)["shown"] > 0  # Already searched: from the cache, free.
+
+
+def test_failed_requests_count_too_and_usage_resets_each_period(monkeypatch):
+    from datetime import date
+    use(monkeypatch, FakeRentCast(status=500))
+    with pytest.raises(rentcast.RentCastError):
+        rentcast.search(34.07, -118.44, 2)
+    assert rentcast.usage()["requests"] == 1  # Sent, so it may be billed.
+    assert rentcast.usage(date(2099, 1, 20))["requests"] == 0  # A new billing period starts from zero.

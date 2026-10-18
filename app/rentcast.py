@@ -18,6 +18,7 @@ import json
 import math
 import os
 import statistics
+from datetime import date
 from typing import Optional
 
 import httpx
@@ -35,8 +36,47 @@ PER_ROOM_SHARE = 0.4
 MIN_COMPARABLES = 10  # Need at least this many 2+ bedroom listings to know what "typical" is.
 
 
+# Hard cap so we never pay overage ($0.20 per request past the free 50). The free quota resets on the
+# plan's billing day (the day of the month the plan was activated), not on the 1st, so we count from there.
+# Override in .env: RENTCAST_MONTHLY_CAP, RENTCAST_BILLING_DAY.
+DEFAULT_MONTHLY_CAP = 45
+DEFAULT_BILLING_DAY = 17  # Plan activated Oct 17, 2026.
+USAGE_KEY = "usage"  # Stored in cache/rentcast/ like the replies (git-ignored, per laptop).
+
+
 class RentCastError(RuntimeError):
     pass
+
+
+def billing_period_start(today: date, billing_day: int) -> date:
+    """The most recent billing day on or before today (day clamped to 28 so every month has it)."""
+    day = min(max(billing_day, 1), 28)
+    if today.day >= day:
+        return today.replace(day=day)
+    year, month = (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    return date(year, month, day)
+
+
+def usage(today: Optional[date] = None) -> dict:
+    """{"period_start", "requests", "cap"} for the current billing period on this laptop."""
+    today = today or date.today()
+    start = billing_period_start(today, int(os.getenv("RENTCAST_BILLING_DAY", DEFAULT_BILLING_DAY)))
+    saved = cache.get("rentcast", USAGE_KEY) or {}
+    count = saved.get("requests", 0) if saved.get("period_start") == start.isoformat() else 0
+    return {"period_start": start.isoformat(), "requests": count,
+            "cap": int(os.getenv("RENTCAST_MONTHLY_CAP", DEFAULT_MONTHLY_CAP))}
+
+
+def _count_request(today: Optional[date] = None) -> dict:
+    """Refuse once the cap is reached; otherwise record one more request (before sending it)."""
+    u = usage(today)
+    if u["requests"] >= u["cap"]:
+        raise RentCastError(
+            f"Stopped to avoid charges: {u['requests']} of the {u['cap']} RentCast searches allowed this billing "
+            f"period are used (it resets on the billing day). Places already searched still work from the cache.")
+    u["requests"] += 1
+    cache.put("rentcast", USAGE_KEY, {"period_start": u["period_start"], "requests": u["requests"]})
+    return u
 
 
 def _key() -> Optional[str]:
@@ -54,6 +94,7 @@ def search_raw(lat: float, lng: float, radius_miles: float) -> list[dict]:
     api_key = _key()
     if not api_key:
         raise RentCastError("RENTCAST_API_KEY is not set in .env.")
+    _count_request()  # Counted before sending: a request that fails may still be billed.
     try:
         r = httpx.get(API_URL, params=params, timeout=60,
                       headers={"X-Api-Key": api_key, "Accept": "application/json"})
@@ -148,5 +189,6 @@ def search(lat: float, lng: float, radius_miles: float = 2, min_bedrooms: int = 
         "shown": len(shown),
         "flagged_per_room": sum(1 for listing in shown if listing.price_check),
         "typical_rent_per_bedroom": round(typical) if typical else None,
+        "usage": usage(),  # Searches used this billing period, so the page can show what's left.
         "listings": shown,
     }

@@ -129,6 +129,10 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
   `price_check: "possible_per_room"`, `rent_total_monthly: null` (rent per person unknown, never split), `listed_price`,
   and a red flag that the card shows. Flagged listings rank last and are never anyone's favorite.
 - New listing fields: `source` ("demo"/"pasted"/"rentcast"), `listed_price`, `price_check`, `property_type`, `square_feet`, `commute_to`.
+- **Hard cap:** at most 45 new-area RentCast searches per billing period (resets on the 17th, the plan's billing day),
+  counted per laptop in `cache/rentcast/`. At the cap, new places are refused with a clear message; places already
+  searched still work from the cache. The page shows "New-area searches this month: N of 45". Tu: if you get your own
+  RentCast key, it has its own 50; if you use Freddy's, both laptops count separately, so be careful.
 - "Own bathroom" wish (text: "my own bathroom"): enough bathrooms for everyone who asked, plus one shared for the rest.
 - Open question for both of us: a pick with unknown laundry/parking can beat one with known shared laundry,
   because unknowns are excluded (the brief's rule). It is marked partial data. Change the rule or leave it?

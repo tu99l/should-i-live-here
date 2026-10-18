@@ -38,6 +38,7 @@
       status.innerHTML = `Showing the ${data.shown} nearest of ${data.matching} rentals with ${body.min_bedrooms}+ bedrooms` +
         (body.max_rent_per_person ? ` within $${body.max_rent_per_person.toLocaleString("en-US")} each` : "") +
         ` (${data.found} active near ${h(data.place.name)}). Laundry and parking aren't in this data, so they show as unknown.` +
+        (data.usage ? ` <span class="search-usage">New-area searches this month: ${data.usage.requests} of ${data.usage.cap}.</span>` : "") +
         (data.flagged_per_room ? ` <span class="search-flag">⚠ ${data.flagged_per_room} may be priced for one room, not the whole place. Their rent per person is left unknown until you check the listing.</span>` : "");
     } catch (e) {
       status.className = "status error";
