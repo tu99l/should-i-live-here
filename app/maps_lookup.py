@@ -43,6 +43,13 @@ def _waypoint(place: Place) -> dict:
     return {"location": {"latLng": {"latitude": place["lat"], "longitude": place["lng"]}}}
 
 
+_last_call_failed = [False]  # Set when Google couldn't be reached (vs. answered "nothing found").
+
+
+class MapsUnavailable(RuntimeError):
+    """Google Maps couldn't be reached (no network or no key), as opposed to finding nothing."""
+
+
 def _post(kind: str, url: str, field_mask: str, body: dict) -> Optional[dict]:
     """One cached Google call. Returns the JSON reply, or None with no key or on failure (not cached)."""
     cache_key = url + "|" + json.dumps(body, sort_keys=True)
@@ -58,6 +65,7 @@ def _post(kind: str, url: str, field_mask: str, body: dict) -> Optional[dict]:
         r.raise_for_status()
         reply = r.json()
     except (httpx.HTTPError, ValueError):
+        _last_call_failed[0] = True
         return None  # Shown as "unknown"; a later request can try again.
     cache.put(kind, cache_key, reply)
     return reply
@@ -277,8 +285,12 @@ def find_place(text: str) -> Optional[dict]:
     text = " ".join(text.split())
     if not text:
         return None
+    _last_call_failed[0] = False
     reply = _post("near", SEARCH_TEXT_URL, "places.displayName,places.formattedAddress,places.location",
                   {"textQuery": text, "pageSize": 1})
+    if reply is None and (_last_call_failed[0] or not _key()):
+        raise MapsUnavailable("Couldn't reach Google Maps right now (no network or no key). Places already "
+                              "searched still work.")
     places = (reply or {}).get("places") or []
     if not places:
         return None

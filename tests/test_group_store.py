@@ -108,3 +108,28 @@ def test_decide_needs_someone_and_reset_clears_the_group():
     client.post("/api/group/demo")
     assert client.post("/api/group/reset").json()["people"] == []
     assert client.post("/api/group/decide").status_code == 400
+
+
+# ---------- Found by stress testing (Oct 18) ----------
+
+def test_no_listings_gives_a_clear_message_not_a_crash():
+    client.post("/api/group/demo")
+    client.put("/api/group/listings", json={"listings": []})
+    r = client.post("/api/group/decide")
+    assert r.status_code == 400 and "No places on the map yet" in r.json()["detail"]
+    assert photon_bot.current_pick("Alex").startswith("No places on the map yet")
+    from app import share
+    assert client.get(f"/api/share/{share.code()}").json()["decision"] is None
+
+
+def test_offline_errors_say_what_happened(monkeypatch):
+    from app import maps_lookup, wishes
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    r = client.post("/api/search", json={"place": "Somewhere New 12345"})
+    assert r.status_code == 503 and "Couldn't reach Google Maps" in r.json()["detail"]
+    def down(*_):
+        raise RuntimeError("[Errno 8] nodename nor servname provided")
+    monkeypatch.setattr(wishes, "_call_gemini", down)
+    client.post("/api/group/me", json={"name": "A"})
+    r = client.post("/api/group/people/A/wishes", json={"text": "I would really love a balcony and a dog park"})
+    assert r.status_code == 502 and "Couldn't reach Gemini" in r.json()["detail"] and "Errno" not in r.json()["detail"]

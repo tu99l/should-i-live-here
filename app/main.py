@@ -18,6 +18,9 @@ from .models import DecideRequest, Listing, ParseRequest, TravelMode  # noqa: E4
 from .wishes import Wishes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+NO_LISTINGS = "No places on the map yet. Search near your place, or paste a listing in step 4."
+WISHES_DOWN = ("Couldn't reach Gemini to read that just now. Short texts like \"laundry 5, rent 3\" still work, "
+               "or try again in a minute.")
 app = FastAPI(title="Should I Live Here?")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -96,7 +99,7 @@ def read_wishes(req: ParseRequest) -> Wishes:
     try:
         return wishes.parse_wishes(req.text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not read that: {e}")
+        raise HTTPException(status_code=502, detail=WISHES_DOWN) from e
 
 
 @app.post("/api/explain")
@@ -151,7 +154,10 @@ def roommates() -> list[dict]:
 @app.get("/api/place")
 def place(q: str) -> dict:
     """Text like "UCLA" or "Santa Monica Pier" -> {name, formatted_address, lat, lng} from Google (cached)."""
-    found = maps_lookup.find_place(q)
+    try:
+        found = maps_lookup.find_place(q)
+    except maps_lookup.MapsUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
     if not found:
         raise HTTPException(status_code=404, detail=f"Couldn't find {q!r} on the map. Try a fuller name or address.")
     return found
@@ -173,7 +179,10 @@ def search_listings(req: SearchRequest) -> dict:
     Listings whose price looks like ONE room's price are kept but flagged (price_check, red_flags),
     with rent per person left unknown. Walk and bike times to the place come from Google.
     """
-    center = maps_lookup.find_place(req.place)
+    try:
+        center = maps_lookup.find_place(req.place)
+    except maps_lookup.MapsUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
     if not center:
         raise HTTPException(status_code=404, detail=f"Couldn't find {req.place!r} on the map.")
     try:
@@ -209,7 +218,7 @@ def _read_wishes(text: str) -> Optional[wishes.Wishes]:
     try:
         return wishes.parse_wishes(text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Couldn't read that just now: {e}")
+        raise HTTPException(status_code=502, detail=WISHES_DOWN) from e
 
 
 def _apply(person: group_store.Person, w: Optional[wishes.Wishes], text: Optional[str]) -> None:
@@ -375,12 +384,15 @@ def decide_for_group() -> dict:
     g = group_store.read()
     if not g.people:
         raise HTTPException(status_code=400, detail="Nobody in the group yet.")
+    if not g.current_listings():
+        raise HTTPException(status_code=400, detail=NO_LISTINGS)
     return photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)
 
 
 # ---------- View-only results link for roommates (share.py, scripts/share_link.py) ----------
 
 _share_cache: dict = {}  # {group version: decision}, so phones refreshing don't redo the work.
+_share_lock = __import__("threading").Lock()  # Many phones at once: the first computes, the rest reuse it.
 
 
 def _check_code(code: str) -> None:
@@ -409,14 +421,23 @@ def share_data(code: str) -> dict:
               for p in g.people]
     decision = None
     if g.people:
-        if g.version not in _share_cache:
-            _share_cache.clear()
-            _share_cache[g.version] = photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)
-        decision = _share_cache[g.version]
+        with _share_lock:
+            if g.version not in _share_cache:
+                _share_cache.clear()
+                _share_cache[g.version] = (photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)
+                                           if g.current_listings() else None)
+            decision = _share_cache[g.version]
     listings = [l.model_dump(include={"id", "title", "address", "lat", "lng", "rent_total_monthly", "listed_price",
                                       "rent_per_person_listed", "bedrooms", "bathrooms", "laundry", "parking",
                                       "walk_minutes", "bike_minutes", "red_flags", "price_check", "property_type",
                                       "square_feet", "source"}) for l in g.current_listings()]
+    if decision:
+        # The page shows the full breakdown only for the pick; other places need just each person's score.
+        # (Keeps the download small for phones on cellular: ~170 KB -> ~35 KB for 50 places.)
+        decision = {**decision, "ranking": [
+            r if r["listing_id"] == decision["pick"]["listing_id"] else
+            {**r, "per_roommate": [{"roommate": p["roommate"], "score": p["score"]} for p in r["per_roommate"]]}
+            for r in decision["ranking"]]}
     return {"version": g.version, "place": g.place, "size": g.size, "people": people,
             "listings": listings, "decision": decision}
 

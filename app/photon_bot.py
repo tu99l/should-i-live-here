@@ -181,6 +181,8 @@ def run_decision(roommates: list[Roommate], listings: list[Listing], place: str 
 def current_pick(name: str) -> str:
     """The pick as text for one person, plus the map link when one is running. Notes pick changes (see changed_pick)."""
     g = group_store.read()
+    if not g.current_listings():
+        return "No places on the map yet. Whoever started the group can search for listings on the website."
     decision = run_decision(g.roommates(), g.current_listings(), g.place, g.size)
     _pick_seen[name] = decision["pick"]
     text = pick_summary(decision, name)
