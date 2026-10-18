@@ -45,9 +45,15 @@ section h2 { font-family: var(--heading); font-weight: 800; font-size: 15px; col
 .tip-sub { font-size: 10.5px; color: var(--muted); font-weight: 400; }
 .remove { background: none; color: var(--muted); border: 0; font-size: 18px; padding: 0 4px; cursor: pointer; }
 .remove:hover { color: var(--warn); }
-.slider { display: grid; grid-template-columns: 74px 1fr 16px; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
-.slider input { accent-color: var(--blue); }
-.slider b { color: var(--ink); text-align: right; }
+/* 0-5 rating buttons: the chosen one fills gold */
+.rating { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 8px; font-size: 12.5px;
+          color: var(--muted); margin: 3px 0; }
+.rating-buttons { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.rating-buttons button { font: 600 12px var(--body); padding: 4px 0; border: 1px solid var(--line); border-radius: 6px;
+                         background: #fff; color: var(--muted); cursor: pointer; transition: background .12s, border-color .12s; }
+.rating-buttons button:hover { border-color: var(--blue); color: var(--blue); }
+.rating-buttons button.on { background: var(--gold); border-color: var(--gold); color: var(--navy); font-weight: 800; }
+.rating-buttons button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 
 /* Buttons */
 button.primary, button.secondary {

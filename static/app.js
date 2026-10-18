@@ -8,6 +8,8 @@ const WALK_METERS_PER_MINUTE = 80; // ~3 mph, so 35 min is about 2.8 km (1.75 mi
 // Must match CRITERIA in app/scoring.py.
 const FACTORS = ["rent", "commute", "laundry", "parking", "bedrooms"];
 const FACTOR_LABELS = { rent: "Rent", commute: "Commute", laundry: "Laundry", parking: "Parking", bedrooms: "Bedrooms" };
+// Shown when hovering a rating button.
+const RATING_WORDS = ["don't care", "a little", "somewhat", "matters", "a lot", "deal-breaker"];
 // Must match TravelMode in app/models.py. The words are used in sentences like "31 min by bike".
 const TRAVEL_MODES = { WALK: "walking", BICYCLE: "by bike", TRANSIT: "by transit", DRIVE: "driving" };
 
@@ -218,11 +220,23 @@ function renderRoommates() {
         </select>
       </div>
       ${FACTORS.map(f => `
-        <div class="slider"><span>${FACTOR_LABELS[f]}</span>
-          <input type="range" min="0" max="5" value="${r.weights[f]}" aria-label="${esc(r.name)} ${f} weight"
-                 oninput="roommates[${i}].weights.${f}=+this.value; this.nextElementSibling.textContent=this.value">
-          <b>${r.weights[f]}</b></div>`).join("")}
+        <div class="rating"><span>${FACTOR_LABELS[f]}</span>
+          <div class="rating-buttons" role="radiogroup" aria-label="How much ${esc(FACTOR_LABELS[f].toLowerCase())} matters to ${esc(r.name)}">
+            ${[0, 1, 2, 3, 4, 5].map(v => `<button type="button" role="radio" aria-checked="${r.weights[f] === v}"
+              class="${r.weights[f] === v ? "on" : ""}" title="${v}: ${RATING_WORDS[v]}"
+              onclick="setWeight(${i}, '${f}', ${v}, this)">${v}</button>`).join("")}
+          </div></div>`).join("")}
     </div>`).join("");
+}
+
+// Updates only the clicked row, so the rest of the panel doesn't redraw.
+function setWeight(i, f, v, btn) {
+  roommates[i].weights[f] = v;
+  for (const b of btn.parentElement.children) {
+    const on = b === btn;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on);
+  }
 }
 
 function showEmptyResult() {

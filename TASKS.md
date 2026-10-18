@@ -41,7 +41,7 @@ New fields in `/api/decide`:
 - `least_happy.reasons`: up to 2 of `{criterion, raw_value, points_lost}`, e.g. laundry "shared" cost Jordan 18.8 points. Nicer than `gives_up_most_on` alone. `gives_up_most_on` is `null` if the pick is perfect for them.
 - `everyone_agrees`: true when every roommate's favorite is the same listing.
 - Ranking rows: `rank`, `unknown`, `known_share` (0-1, share of the 5 facts known).
-Demo move that flips the pick (tested, with real Google walk times): Sam's "laundry" slider 3 -> 5 changes the pick from 424 Landfair (shared laundry) to 1824 Fairburn (in-unit laundry).
+Demo move that flips the pick: Sam's "laundry" 3 -> 5 no longer flips it (re-tested 7 PM Sat after the newer scoring changes; 424 Landfair stays). Single changes that do flip it: Alex rent 5 -> 1 (1824 Fairburn), Alex rent 5 -> 0 (547 Landfair), Jordan rent 3 -> 0 or bedrooms 3 -> 0 (1824 Fairburn). Sam by bike to Santa Monica Pier still flips it to 1824 Fairburn.
 
 ## For Tu, from step 4
 - Demo walk times are now real Google numbers to Royce Hall (most went up: 424 Landfair is 18 min, not 10). Several listings are now outside the 35-min walk circle.
