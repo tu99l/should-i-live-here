@@ -183,3 +183,22 @@ def test_rent_is_split_by_the_expected_group_size_not_just_who_is_added():
     assert decide([place], [alone])["ranking"][0]["rent_per_person"] == 4500
     assert decide([place], [alone], group_size=3)["ranking"][0]["rent_per_person"] == 1500
     assert decide([place], [alone, SAVER], group_size=1)["ranking"][0]["rent_per_person"] == 2250  # Never fewer than added.
+
+
+def test_pick_missing_rent_is_kept_but_flagged_with_a_known_alternate():
+    # Unknown rent is left out of the score (never guessed), so this place wins on everything else...
+    mystery = make_listing(id="mystery", rent_total_monthly=None, walk_minutes=5)
+    known = make_listing(id="known", rent_total_monthly=3600, walk_minutes=25, laundry="shared", bathrooms=2)
+    both = [person("A", rent=3, commute=3, laundry=3), person("B", rent=3, commute=3, laundry=3)]
+    result = decide([mystery, known], both)
+    assert result["pick"]["listing_id"] == "mystery"  # ...and stays the pick,
+    assert result["pick"]["missing_major"] == ["rent", "bathrooms"]
+    assert "doesn't say its rent and number of bathrooms" in result["pick"]["warning"]  # flagged with why,
+    assert result["alternate"]["listing_id"] == "known"  # with the fairest fully known place next to it.
+    assert result["alternate"]["rent_per_person"] == 1800.0
+
+
+def test_no_warning_when_the_pick_states_rent_rooms_and_baths():
+    full = make_listing(id="full", bathrooms=2)
+    result = decide([full], [WALKER])
+    assert result["pick"]["warning"] is None and result["alternate"] is None

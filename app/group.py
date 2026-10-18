@@ -13,6 +13,8 @@ from typing import Optional
 from .models import Listing, Roommate
 from .scoring import CRITERIA, rent_per_person, score_listing
 
+# Facts so basic that a pick without them needs a warning and a known alternative next to it.
+MAJOR_FACTS = {"rent": "rent", "bedrooms": "number of bedrooms", "bathrooms": "number of bathrooms"}
 CONFLICT_GAP = 25  # Roommate scores this far apart (out of 100) on one listing count as a disagreement.
 REASONS_SHOWN = 2  # How many "why" criteria to report for the least happy roommate.
 
@@ -79,6 +81,10 @@ def decide(listings: list[Listing], roommates: list[Roommate],
             "unknown": unknown,
             "known_share": round(1 - len(unknown) / max(len(all_criteria), len(CRITERIA)), 2),
             "red_flags": listing.red_flags,
+            # Major facts this listing doesn't state (rent per person, bedrooms, bathrooms). Never guessed.
+            "missing_major": [k for k, v in (("rent", rent_per_person(listing, group_size)),
+                                             ("bedrooms", listing.bedrooms), ("bathrooms", listing.bathrooms))
+                              if v is None],
             "per_roommate": per_roommate,
         })
 
@@ -88,6 +94,22 @@ def decide(listings: list[Listing], roommates: list[Roommate],
     for rank, r in enumerate(results, start=1):
         r["rank"] = rank
     pick = results[0]
+
+    # The pick stays the fairest place, but if it's missing a major fact it is flagged, and the fairest
+    # place where rent, bedrooms and bathrooms are all known is offered next to it.
+    alternate = None
+    if pick["missing_major"]:
+        alt = next((r for r in results[1:] if not r["missing_major"] and not r["red_flags"]), None)
+        if alt:
+            alternate = {"listing_id": alt["listing_id"], "title": alt["title"], "rank": alt["rank"],
+                         "rent_per_person": alt["rent_per_person"], "min_score": alt["min_score"],
+                         "avg_score": alt["avg_score"],
+                         "scores": [{"roommate": p["roommate"], "score": p["score"]} for p in alt["per_roommate"]]}
+    missing_words = [MAJOR_FACTS[k] for k in pick["missing_major"]]
+    warning = None
+    if missing_words:
+        joined = " and ".join(missing_words) if len(missing_words) < 3 else ", ".join(missing_words[:-1]) + " and " + missing_words[-1]
+        warning = f"The listing doesn't say its {joined}, so check it before deciding."
 
     least_happy = min(pick["per_roommate"], key=lambda p: _rank_value(p["score"]))
     reasons = _reasons(least_happy)
@@ -109,7 +131,10 @@ def decide(listings: list[Listing], roommates: list[Roommate],
             "avg_score": pick["avg_score"],
             "partial_data": pick["partial_data"],
             "unknown": pick["unknown"],
+            "missing_major": pick["missing_major"],
+            "warning": warning,
         },
+        "alternate": alternate,
         "least_happy": {
             "roommate": least_happy["roommate"],
             "score": least_happy["score"],

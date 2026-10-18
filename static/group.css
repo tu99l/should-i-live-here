@@ -102,3 +102,8 @@
 .share-link { display: flex; gap: 6px; margin-top: 6px; }
 .share-link input { flex: 1; min-width: 0; font: 12px var(--body); padding: 6px 8px; border: 1px solid var(--line);
                     border-radius: 6px; color: var(--ink); background: var(--bg); }
+
+/* Fair pick missing a major fact (rent, bedrooms, bathrooms): warning + known alternative */
+.pick-warning { margin-top: 6px; color: var(--warn); font-weight: 600; font-size: 13px; }
+.pick-alt { margin-top: 4px; font-size: 13px; }
+.pick-alt a { color: var(--blue); font-weight: 700; }

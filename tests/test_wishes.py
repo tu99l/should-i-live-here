@@ -200,3 +200,11 @@ def test_specific_ask_is_saved_and_replaced_when_they_change_their_mind():
     assert r.strict == ["in_unit_laundry"] and r.weights.laundry == 4
     r = wishes.apply_wishes(r, wishes.Wishes(weights={"laundry": 2}))  # "any laundry is fine"
     assert r.strict == []
+
+
+def test_how_they_get_to_campus_is_read_only_from_their_own_words():
+    text = "I go to school most days through transit"
+    ok = json.dumps({"travel_mode": "TRANSIT", "travel_mode_quote": "through transit"})
+    assert wishes.validate_wishes(ok, text).travel_mode == "TRANSIT"
+    made_up = json.dumps({"travel_mode": "DRIVE", "travel_mode_quote": "through transit"})
+    assert wishes.validate_wishes(made_up, text).travel_mode is None  # They never said drive.

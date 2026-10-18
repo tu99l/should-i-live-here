@@ -140,8 +140,14 @@ def pick_summary(decision: dict, roommate_name: str) -> str:
     row = next(r for r in decision["ranking"] if r["listing_id"] == pick["listing_id"])
     names = [s["roommate"] for s in pick["scores"]]
     mine = next(p for p in row["per_roommate"] if p["roommate"] == roommate_name)
-    lines = [f"Fairest pick for {', '.join(names[:-1])} & {names[-1]}: {pick['title']}, "
-             f"{_money(row['rent_per_person'])} each."]
+    rent = f"{_money(row['rent_per_person'])} each" if row["rent_per_person"] is not None else "rent unknown"
+    lines = [f"Fairest pick for {', '.join(names[:-1])} & {names[-1]}: {pick['title']}, {rent}."]
+    if pick.get("warning"):
+        lines.append(f"⚠ {pick['warning']}")
+        alt = decision.get("alternate")
+        if alt:
+            alt_rent = f"{_money(alt['rent_per_person'])} each" if alt["rent_per_person"] is not None else "rent unknown"
+            lines.append(f"Fairest place with rent, bedrooms and bathrooms all known: {alt['title']}, {alt_rent}.")
     my_score = mine["score"]
     lines.append(f"You: {my_score:g}/100." if my_score is not None else "You: not enough facts to score.")
     why = _reasons_text(least["reasons"])

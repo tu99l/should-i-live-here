@@ -26,7 +26,7 @@ from .extract import _client, _model, _normalize, _numbers_in, quote_in_text
 from .models import Listing, Roommate, TravelMode, Want
 from .scoring import CRITERIA
 
-PROMPT_VERSION = "wishes-v4"
+PROMPT_VERSION = "wishes-v5"
 FEATURE_PROMPT_VERSION = "features-v1"
 
 # How an importance word becomes a 0-5 weight. Our numbers, not the model's.
@@ -49,7 +49,12 @@ _CRITERION_WORDS = {"rent": "rent", "price": "rent", "commute": "commute", "walk
                     "laundry": "laundry", "parking": "parking", "bedrooms": "bedrooms",
                     "beds": "bedrooms", "bedroom": "bedrooms"}
 
-MAX_WANTS = 8  # Same cap as Roommate.wants; the newest wishes are kept.
+MAX_WANTS = 8
+
+# Words that must appear in their quote for us to accept how they travel.
+MODE_WORDS = {"WALK": ("walk",), "BICYCLE": ("bike", "bicycle", "cycl", "scooter"),
+              "TRANSIT": ("transit", "bus", "metro", "train", "subway", "rail", "public transport"),
+              "DRIVE": ("drive", "driving", "car")}  # Same cap as Roommate.wants; the newest wishes are kept.
 
 
 class Wishes(BaseModel):
@@ -109,8 +114,9 @@ said into the JSON fields. Return JSON only.
   "gas included" and "water included".
 - budget: the most they will pay per month, only if they state a dollar amount. A budget alone is
   NOT a rent wish: add a core rent entry only if they say how much price matters (cheap, rent matters most).
-- destination: a specific place they travel to regularly that is NOT campus (work, an internship),
-  with travel_mode WALK, BICYCLE, TRANSIT or DRIVE if they say how they get there.
+- destination: a specific place they travel to regularly that is NOT campus (work, an internship).
+- travel_mode: how they get to school/campus or to their destination, if they say it: WALK, BICYCLE, TRANSIT
+  (bus, metro, train) or DRIVE, with travel_mode_quote = their exact words ("I go to school through transit").
 - own_bathroom: their importance if they want their OWN bathroom (private bath, own bathroom), else null,
   with own_bathroom_quote = their exact words.
 - cannot_check: things no listing or map can confirm (quiet, safe, nice landlord, good vibes, natural light).
@@ -156,6 +162,7 @@ class WishReply(BaseModel):
     destination: Optional[str] = None
     travel_mode: Optional[TravelMode] = None
     destination_quote: Optional[str] = None
+    travel_mode_quote: Optional[str] = None
     cannot_check: list[str] = Field(default_factory=list)
     own_bathroom: Optional[Importance] = None
     own_bathroom_quote: Optional[str] = None
@@ -213,10 +220,15 @@ def validate_wishes(raw_json: str, text: str) -> Wishes:
         q = reply.destination_quote or ""
         if quote_in_text(q, text) and _shares_a_word(reply.destination, q):
             out.place = reply.destination.strip()
-            out.travel_mode = reply.travel_mode
             out.evidence["place"] = q
         else:
             out.not_understood.append(q or reply.destination)
+    if reply.travel_mode:
+        # How they get there, kept only if their own words name it ("through transit", "I bike").
+        q = reply.travel_mode_quote or reply.destination_quote or ""
+        if quote_in_text(q, text) and any(w in _normalize(q) for w in MODE_WORDS[reply.travel_mode]):
+            out.travel_mode = reply.travel_mode
+            out.evidence["travel_mode"] = q
 
     # A budget is not a rent importance; only keep a rent rating that has its own words.
     if "budget" in out.evidence and out.evidence.get("rent") == out.evidence["budget"]:
@@ -428,7 +440,9 @@ def describe(wishes: Wishes) -> list[str]:
         lines.append(f"dropped {w.what}")
     if wishes.budget:
         lines.append(f"budget ${wishes.budget:,.0f}/mo")
+    how = {"WALK": "walking", "BICYCLE": "by bike", "TRANSIT": "by transit", "DRIVE": "driving"}.get(wishes.travel_mode or "", "")
     if wishes.place:
-        how = {"WALK": "walk", "BICYCLE": "bike", "TRANSIT": "transit", "DRIVE": "drive"}.get(wishes.travel_mode or "", "")
-        lines.append(f"commute to {wishes.place}" + (f" by {how}" if how else ""))
+        lines.append(f"commute to {wishes.place}" + (f" {how}" if how else ""))
+    elif how:
+        lines.append(f"getting there {how}")
     return lines

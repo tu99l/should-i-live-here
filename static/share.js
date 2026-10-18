@@ -49,10 +49,14 @@
     box.innerHTML = `
       <div class="label">The fairest pick for all of you</div>
       <div class="title">★ ${h(d.pick.title)}</div>
-      <div class="rent">${row?.rent_per_person != null ? `<b>${money(row.rent_per_person)}</b> each` : "Rent each: unknown"}
+      <div class="rent">${row?.rent_per_person != null ? `<b>${money(row.rent_per_person)}</b> each` : "Rent: unknown"}
         · ${l.bedrooms ?? "?"} bd, ${l.bathrooms ?? "?"} ba${l.walk_minutes != null ? ` · ${Math.round(l.walk_minutes)} min walk` : ""}</div>
       <div class="why">${d.everyone_agrees ? "It's everyone's favorite."
         : `<b>${h(lh.roommate)}</b> gives up the most here (${lh.score ?? "?"}/100)${why ? `: ${h(why)}` : ""}. Every other place leaves someone worse off.`}</div>
+      ${d.pick.warning ? `<div class="flag">⚠ ${h(d.pick.warning)}</div>` : ""}
+      ${d.alternate ? `<div class="alt">Fairest place with rent, bedrooms and bathrooms all known:
+          <a href="#" data-id="${h(d.alternate.listing_id)}">${h(d.alternate.title)}</a>${
+          d.alternate.rent_per_person != null ? `, <b>${money(d.alternate.rent_per_person)}</b> each` : ""}.</div>` : ""}
       ${d.pick.unknown?.length ? `<div class="sh-small sh-muted">Unknown for this place: ${h(d.pick.unknown.join(", "))}.</div>` : ""}`;
   }
 
@@ -161,6 +165,12 @@
       el("updated").textContent = "Can't reach the app right now; it'll try again.";
     }
   }
+
+  el("pick").addEventListener("click", e => {  // The alternate's name jumps to it on the map.
+    const a = e.target.closest("a[data-id]");
+    const m = a && markers[a.dataset.id];
+    if (m) { e.preventDefault(); map.setView(m.getLatLng(), 16); m.openPopup(); el("map").scrollIntoView({ behavior: "smooth", block: "center" }); }
+  });
 
   el("ranking").addEventListener("click", e => {
     const tr = e.target.closest("tr.row");

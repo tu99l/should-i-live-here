@@ -314,6 +314,11 @@ async function runDecision() {
     const lh = d.least_happy;
     out.innerHTML = `<div class="result">
         <div class="pick">★ ${esc(d.pick.title)}</div>
+        ${d.pick.warning ? `<div class="pick-warning">⚠ ${esc(d.pick.warning)}</div>` : ""}
+        ${d.alternate ? `<div class="pick-alt">Fairest place with rent, bedrooms and bathrooms all known:
+            <a href="#" onclick="focusListing('${esc(d.alternate.listing_id)}'); return false;">${esc(d.alternate.title)}</a>${
+            d.alternate.rent_per_person != null ? `, ${money(d.alternate.rent_per_person)} each` : ""}
+            (lowest score ${score(d.alternate.min_score)})</div>` : ""}
         <div class="why">${d.everyone_agrees
           ? "Everyone's favorite is the same place."
           : `<b>${esc(lh.roommate)}</b> gives up the most (score ${score(lh.score)})${lh.reasons?.length
