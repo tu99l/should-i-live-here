@@ -18,6 +18,16 @@ app = FastAPI(title="Should I Live Here?")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
+@app.middleware("http")
+async def always_fresh_page(request, call_next):
+    """Make browsers re-check the page and its files on every load, so after a git pull
+    nobody sees an old cached app.js or styles.css mixed with a new index.html."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "static" / "index.html")
