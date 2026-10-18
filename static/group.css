@@ -113,3 +113,11 @@
                      padding: 3px 10px; }
 .remove.confirming:hover { color: #fff; filter: brightness(1.08); }
 .group-links .link.confirming-link { color: var(--warn); font-weight: 700; }
+
+/* Section 4 "Found a place somewhere else?" opens on click */
+.found-elsewhere > summary { list-style: none; cursor: pointer; }
+.found-elsewhere > summary::-webkit-details-marker { display: none; }
+.found-elsewhere > summary h2 { margin: 0; }
+.found-elsewhere > summary h2::after { content: "▸"; margin-left: auto; color: var(--blue); font-size: 13px; }
+.found-elsewhere[open] > summary h2::after { content: "▾"; }
+.found-elsewhere[open] > summary { margin-bottom: 8px; }

@@ -125,12 +125,15 @@
     </section>
 
     <section>
-      <h2><span class="step">4</span>Add a listing</h2>
-      <p class="hint">Paste the text of any listing, from any city. We pull out the facts and look up real walk times and groceries.
-        <a href="#" id="startFresh" class="link" onclick="clearDemo(); return false;">Not near UCLA? Remove the 12 demo listings.</a></p>
-      <textarea id="paste" placeholder="Paste listing text here, e.g. from Zillow or Craigslist"></textarea>
-      <button class="secondary" id="parseBtn" onclick="parseListing()">Read listing</button>
-      <div id="parseStatus" class="status"></div>
+      <details class="found-elsewhere">
+        <summary><h2><span class="step">4</span>Found a place somewhere else?</h2></summary>
+        <p class="hint">Paste a listing from Zillow, Craigslist or a friend's post. We read it word by word and add facts the
+          live search doesn't have, like laundry, parking and utilities, each with the listing's exact words.
+          <a href="#" id="startFresh" class="link" onclick="clearDemo(); return false;">Not near UCLA? Remove the 12 demo listings.</a></p>
+        <textarea id="paste" placeholder="Paste the listing's text here"></textarea>
+        <button class="secondary" id="parseBtn" onclick="parseListing()">Read listing</button>
+        <div id="parseStatus" class="status"></div>
+      </details>
     </section>
   </aside>
 
