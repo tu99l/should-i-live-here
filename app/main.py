@@ -1,16 +1,19 @@
 """FastAPI backend. Run with:  .venv/bin/uvicorn app.main:app --reload"""
 import json
+import os
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from . import extract, group, maps_lookup, wishes  # noqa: E402  (imports read .env, so load it first)
+from . import extract, group, maps_lookup, photon_bot, wishes  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
 from .wishes import Wishes  # noqa: E402
 
@@ -89,3 +92,41 @@ def explain(decision: dict) -> dict:
         return {"text": extract.explain_decision(decision)}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Could not write the explanation: {e}")
+
+
+# ---------- Roommates for the iMessage bot (app/photon_bot.py) ----------
+
+class InviteRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    phone: str = Field(..., max_length=30)
+    email: Optional[str] = Field(None, max_length=254)
+    budget: Optional[float] = Field(None, gt=0)
+
+
+def _photon() -> photon_bot.Photon:
+    key, project = os.getenv("PHOTON_API_KEY"), os.getenv("PHOTON_PROJECT_ID")
+    if not key or not project:
+        raise HTTPException(status_code=503, detail="iMessage is not set up (PHOTON_API_KEY / PHOTON_PROJECT_ID).")
+    return photon_bot.Photon(key, project)
+
+
+@app.post("/api/roommates/invite")
+def invite_roommate(req: InviteRequest) -> dict:
+    """Add a roommate to the iMessage line. Returns the number they text and a one-tap link to start.
+
+    A shared line can't text first, so they send one pre-filled text; the bot then greets them.
+    """
+    try:
+        return photon_bot.invite_roommate(_photon(), req.name, req.phone, req.email or None, req.budget)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not add them to iMessage: {e}")
+
+
+@app.get("/api/roommates")
+def roommates() -> list[dict]:
+    """The bot's group: who has a number, who has texted in ("connected"), and their wishes."""
+    return photon_bot.roster_status()

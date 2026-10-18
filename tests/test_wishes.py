@@ -59,9 +59,10 @@ def test_short_parser_hands_anything_else_to_gemini():
 def test_free_text_becomes_weights_places_and_features(monkeypatch):
     fake_gemini(monkeypatch, [gym_reply()])
     w = wishes.parse_wishes(GYM_TEXT)
-    assert w.weights == {"laundry": 3}
+    assert w.weights == {"laundry": 4}  # "Wanted" counts for more than the starting 3.
     assert [(x.kind, x.what, x.weight) for x in w.wants] == [
-        ("near", "gym", 3), ("feature", "gas included", 5), ("feature", "water included", 5)]
+        ("near", "gym", 4), ("feature", "gas included", 5), ("feature", "water included", 5)]
+    assert w.strict == []  # "laundry included" doesn't say in-unit.
     assert w.not_understood == []
 
 
@@ -179,3 +180,23 @@ def test_facts_are_looked_up_once_per_listing_and_lined_up_per_roommate(monkeypa
     assert facts[(0, 0)] == [{"name": "Gym A", "walk_minutes": 7.0}, {"value": True, "quote": "q"}]
     assert facts[(0, 1)] == [{"name": "Gym A", "walk_minutes": 7.0}]
     assert facts[(0, 2)] == []
+
+
+def test_specific_ask_needs_their_own_words():
+    text = "would like in unit laundry so I don't have to leave. parking is fine"
+    reply = json.dumps({"core": [
+        {"criterion": "laundry", "importance": "medium", "quote": "in unit laundry", "specific": "in_unit_laundry"},
+        {"criterion": "parking", "importance": "low", "quote": "parking is fine", "specific": "included_parking"},
+    ]})
+    w = wishes.validate_wishes(reply, text)
+    assert w.weights == {"laundry": 4, "parking": 2}
+    assert w.strict == ["in_unit_laundry"]  # "parking is fine" never said free/included.
+    assert wishes.describe(w)[0] == "in-unit laundry: wanted"
+
+
+def test_specific_ask_is_saved_and_replaced_when_they_change_their_mind():
+    r = Roommate(name="A", budget=1500)
+    r = wishes.apply_wishes(r, wishes.Wishes(weights={"laundry": 4}, strict=["in_unit_laundry"]))
+    assert r.strict == ["in_unit_laundry"] and r.weights.laundry == 4
+    r = wishes.apply_wishes(r, wishes.Wishes(weights={"laundry": 2}))  # "any laundry is fine"
+    assert r.strict == []

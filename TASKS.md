@@ -71,12 +71,31 @@ Roommates can now ask for anything in their own words, by iMessage or (optionall
 - Send `wants` on each roommate in `/api/decide`; nothing else changes. Breakdown rows for wishes have
   `criterion` like `"near: gym"` or `"has: gas included"`, plus `kind`, `place_name` (near) or `evidence`
   (the listing's exact words, for features). Unknown wishes are excluded and flagged like other facts.
+- Specific asks count strictly: "in-unit laundry" means shared laundry scores 0 for that roommate, "free parking"
+  means paid parking scores 0 (roommate field `strict`). Saying you want something now weighs 4 (must 5, important 4.5),
+  above the starting 3, so a text always moves things. Demo (tested): Freddy texts "would like in unit laundry"
+  and the pick moves from 424 Landfair (shared laundry) to 1615 Greenfield (in-unit).
 - Demo listings now have `source_text` (their notes from the old map), so "pets allowed", "water included",
   "A/C" get real yes/no answers with quotes. Gas is unknown everywhere: no listing mentions it.
 - Run the iMessage bot: `.venv/bin/python -m app.photon_bot`. Needs `PHOTON_API_KEY` and `PHOTON_PROJECT_ID`
-  in `.env`, and `data/roommates.local.json` (copy `data/roommates.example.json`, put in real phone numbers;
-  it is git-ignored). Each roommate must be added to the iMessage line in the Photon dashboard and text it first.
-  Line: +1 628-316-6196. Commands: "pick", "reset", "help".
+  in `.env`. Add roommates from the page (see the next section); they are saved in the git-ignored
+  `data/roommates.local.json`. Commands by text: "pick", "reset", "help".
+
+## For Tu: "Add roommate" box on the page (new; backend done, needs UI)
+Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage line can't text first
+(only the $250/month Business plan can), so the roommate sends ONE pre-filled text; the bot replies right away.
+- Form fields: name, phone (any format), email (optional), max rent (optional).
+- `POST /api/roommates/invite` with `{"name", "phone", "email"?, "budget"?}` returns
+  `{name, line, text_link, starter_text, email_invite}`. Errors come back as `{"detail": "..."}` (400 bad number, 502 Photon).
+- Show `text_link` as a big "Text to start" button AND a QR code of it (a laptop demo: they scan with their phone).
+  QR idea: `qrcodejs` from cdnjs. The link opens Messages with our number and "Hi, it's Sam! Let's find our apartment." filled in.
+  Also show `line` as text ("or text +1 628-316-6196"). Each person can get a different line number, so always use the one returned.
+- If `email_invite` is true, say "Photon also emailed them an invite".
+- `GET /api/roommates` lists the group: `{name, phone_last4, line, text_link, connected, budget, wants}`.
+  `connected` turns true after their first text. Poll it every few seconds to flip "Waiting for Sam to text..." to "Sam is in".
+  `wants` are what they've asked for by text (show as chips: "near a gym", "gas included").
+- Inviting someone with an existing name (e.g. "Sam") keeps that roommate's priorities and adds the phone.
+- The bot (`.venv/bin/python -m app.photon_bot`) must be running to answer; it picks up new roommates without a restart.
 
 ## Known risks (decided to leave as is)
 - The page loads Leaflet (unpkg.com) and fonts (Google Fonts) from the internet. Ad blockers like uBlock Origin can block them and break the layout (seen on Freddy's browser; fixed by turning extensions off). Judges only use our laptops, so we left it. If someone else ever needs to run it: copy those files into `static/vendor/` and load them locally.

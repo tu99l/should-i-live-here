@@ -26,6 +26,13 @@ COMMUTE_WORST_MINUTES = 40
 LAUNDRY_SCORES = {"in_unit": 1.0, "shared": 0.4, "none": 0.0}
 PARKING_SCORES = {"included": 1.0, "paid": 0.5, "none": 0.0}
 
+# A roommate who asked for something specific gets no partial credit for less:
+# "in-unit laundry" -> shared laundry scores 0 for them; "free parking" -> paid parking scores 0.
+STRICT_SCORES = {
+    "in_unit_laundry": ("laundry", {"in_unit": 1.0, "shared": 0.0, "none": 0.0}),
+    "included_parking": ("parking", {"included": 1.0, "paid": 0.0, "none": 0.0}),
+}
+
 # A roommate's own "near X" wish (gym, Trader Joe's...): real walk minutes to the nearest one.
 # Full marks at 5 minutes or less (around the block), zero at 25 minutes or more (a trip, not "near").
 NEAR_BEST_MINUTES = 5
@@ -77,13 +84,18 @@ def criterion_scores(listing: Listing, roommate: Roommate, group_size: int,
     rpp = rent_per_person(listing, group_size)
     b = roommate.budget
     beds = listing.bedrooms
+    laundry_scores, parking_scores = LAUNDRY_SCORES, PARKING_SCORES
+    if "in_unit_laundry" in roommate.strict:
+        laundry_scores = STRICT_SCORES["in_unit_laundry"][1]
+    if "included_parking" in roommate.strict:
+        parking_scores = STRICT_SCORES["included_parking"][1]
     return {
         "rent": (rpp, None if rpp is None else
                  _linear(rpp, RENT_BEST_SHARE_OF_BUDGET * b, RENT_WORST_SHARE_OF_BUDGET * b)),
         "commute": (commute_minutes, None if commute_minutes is None else
                     _linear(commute_minutes, COMMUTE_BEST_MINUTES, COMMUTE_WORST_MINUTES)),
-        "laundry": (listing.laundry, LAUNDRY_SCORES.get(listing.laundry)),
-        "parking": (listing.parking, PARKING_SCORES.get(listing.parking)),
+        "laundry": (listing.laundry, laundry_scores.get(listing.laundry)),
+        "parking": (listing.parking, parking_scores.get(listing.parking)),
         # Enough bedrooms for everyone = 1.0, otherwise 0.0.
         "bedrooms": (beds, None if beds is None else (1.0 if beds >= group_size else 0.0)),
     }

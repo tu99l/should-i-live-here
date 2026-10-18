@@ -26,12 +26,23 @@ from .extract import _client, _model, _normalize, _numbers_in, quote_in_text
 from .models import Listing, Roommate, TravelMode, Want
 from .scoring import CRITERIA
 
-PROMPT_VERSION = "wishes-v2"
+PROMPT_VERSION = "wishes-v3"
 FEATURE_PROMPT_VERSION = "features-v1"
 
 # How an importance word becomes a 0-5 weight. Our numbers, not the model's.
 Importance = Literal["must", "high", "medium", "low", "none"]
-IMPORTANCE_WEIGHTS = {"must": 5, "high": 4, "medium": 3, "low": 1, "none": 0}
+# Built-in criteria start at 3, so saying you want something ("medium") must count for more than 3.
+IMPORTANCE_WEIGHTS = {"must": 5, "high": 4.5, "medium": 4, "low": 2, "none": 0}
+LEVEL_NAMES = {5: "must-have", 4.5: "important", 4: "wanted", 3: "wanted", 2: "nice to have", 1: "nice to have",
+               0: "don't care"}
+
+# A specific ask only counts if their own words say it (Gemini can't add it on its own).
+STRICT_WORDS = {
+    "in_unit_laundry": ("in unit", "in-unit", "inunit", "washer", "w/d", "in the unit", "in my unit",
+                        "in the apartment", "inside"),
+    "included_parking": ("free", "included", "incl", "no extra", "comes with"),
+}
+STRICT_CRITERION = {"in_unit_laundry": "laundry", "included_parking": "parking"}
 
 # Words people use for our built-in criteria in short "laundry 5" style texts.
 _CRITERION_WORDS = {"rent": "rent", "price": "rent", "commute": "commute", "walk": "commute",
@@ -45,6 +56,7 @@ class Wishes(BaseModel):
     """What one text asked for, after every quote was checked."""
 
     weights: dict[str, float] = Field(default_factory=dict)  # Only the built-in criteria they mentioned.
+    strict: list[str] = Field(default_factory=list)  # "in_unit_laundry" / "included_parking" they asked for.
     wants: list[Want] = Field(default_factory=list)
     drop: list[Want] = Field(default_factory=list)  # Wishes they no longer care about ("don't need a gym").
     budget: Optional[float] = None
@@ -100,6 +112,8 @@ said into the JSON fields. Return JSON only.
 - destination: a specific place they travel to regularly that is NOT campus (work, an internship),
   with travel_mode WALK, BICYCLE, TRANSIT or DRIVE if they say how they get there.
 - cannot_check: things no listing or map can confirm (quiet, safe, nice landlord, good vibes, natural light).
+- specific (core only): "in_unit_laundry" if they ask for laundry IN the apartment (in-unit, washer/dryer
+  in the unit); "included_parking" if they ask for free or included parking. Otherwise null.
 - importance: "must" (need, must, required, deal-breaker), "high" (really want, important),
   "medium" (want, would like, prefer), "low" (nice to have, bonus), "none" (don't care, don't need).
   If they give a number from 0 to 5: 5 must, 4 high, 3 medium, 1 or 2 low, 0 none.
@@ -114,6 +128,7 @@ class CoreAsk(BaseModel):
     criterion: Literal["rent", "commute", "laundry", "parking", "bedrooms"]
     importance: Importance
     quote: str
+    specific: Optional[Literal["in_unit_laundry", "included_parking"]] = None
 
 
 class NearAsk(BaseModel):
@@ -164,6 +179,10 @@ def validate_wishes(raw_json: str, text: str) -> Wishes:
         if quote_in_text(ask.quote, text):
             out.weights[ask.criterion] = float(IMPORTANCE_WEIGHTS[ask.importance])
             out.evidence[ask.criterion] = ask.quote
+            q = _normalize(ask.quote)
+            if (ask.specific and STRICT_CRITERION[ask.specific] == ask.criterion and ask.importance != "none"
+                    and any(word in q for word in STRICT_WORDS[ask.specific])):
+                out.strict.append(ask.specific)
         else:
             out.not_understood.append(ask.quote)
 
@@ -244,6 +263,9 @@ def apply_wishes(roommate: Roommate, wishes: Wishes) -> Roommate:
     r = roommate.model_copy(deep=True)
     for criterion, weight in wishes.weights.items():
         setattr(r.weights, criterion, weight)
+        # Mentioning laundry/parking again replaces any earlier specific ask for it.
+        r.strict = [x for x in r.strict if STRICT_CRITERION[x] != criterion]
+    r.strict += [x for x in wishes.strict if x not in r.strict]
     if wishes.budget is not None:
         r.budget = wishes.budget
     if wishes.place:
@@ -374,15 +396,16 @@ def want_facts_for(listings: list[Listing], roommates: list[Roommate]) -> dict[t
 
 def describe(wishes: Wishes) -> list[str]:
     """Short plain-English lines saying what we understood, for the reply text."""
-    level = {5: "must-have", 4: "important", 3: "wanted", 1: "nice to have", 0: "don't care"}
+    labels = {"laundry": "in-unit laundry" if "in_unit_laundry" in wishes.strict else "laundry",
+              "parking": "free parking" if "included_parking" in wishes.strict else "parking"}
     lines = []
     for c in CRITERIA:
         if c in wishes.weights:
             w = wishes.weights[c]
-            lines.append(f"{c}: {level.get(int(w), f'{w:g}/5')}")
+            lines.append(f"{labels.get(c, c)}: {LEVEL_NAMES.get(w, f'{w:g}/5')}")
     for w in wishes.wants:
         label = f"near a {w.what}" if w.kind == "near" else w.what
-        lines.append(f"{label}: {level.get(int(w.weight), f'{w.weight:g}/5')}")
+        lines.append(f"{label}: {LEVEL_NAMES.get(w.weight, f'{w.weight:g}/5')}")
     for w in wishes.drop:
         lines.append(f"dropped {w.what}")
     if wishes.budget:
