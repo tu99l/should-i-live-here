@@ -26,7 +26,7 @@ from .extract import _client, _model, _normalize, _numbers_in, quote_in_text
 from .models import Listing, Roommate, TravelMode, Want
 from .scoring import CRITERIA
 
-PROMPT_VERSION = "wishes-v3"
+PROMPT_VERSION = "wishes-v4"
 FEATURE_PROMPT_VERSION = "features-v1"
 
 # How an importance word becomes a 0-5 weight. Our numbers, not the model's.
@@ -99,7 +99,7 @@ WISH_PROMPT = """A student is telling their roommate group what they want in an 
 said into the JSON fields. Return JSON only.
 
 - core: wishes about our built-in criteria. criterion is one of:
-  rent (price, cheap, budget), commute (close to campus / UCLA / class, short walk to school),
+  rent (price, cheap, budget), commute (close to campus, school, class or work, a short walk there),
   laundry, parking, bedrooms (own room, enough bedrooms).
 - near: a kind of place they want close to the apartment, other than campus (gym, grocery store,
   Trader Joe's, park, church, coffee shop). place = a short search phrase for a map, in their words.
@@ -111,6 +111,8 @@ said into the JSON fields. Return JSON only.
   NOT a rent wish: add a core rent entry only if they say how much price matters (cheap, rent matters most).
 - destination: a specific place they travel to regularly that is NOT campus (work, an internship),
   with travel_mode WALK, BICYCLE, TRANSIT or DRIVE if they say how they get there.
+- own_bathroom: their importance if they want their OWN bathroom (private bath, own bathroom), else null,
+  with own_bathroom_quote = their exact words.
 - cannot_check: things no listing or map can confirm (quiet, safe, nice landlord, good vibes, natural light).
 - specific (core only): "in_unit_laundry" if they ask for laundry IN the apartment (in-unit, washer/dryer
   in the unit); "included_parking" if they ask for free or included parking. Otherwise null.
@@ -155,6 +157,8 @@ class WishReply(BaseModel):
     travel_mode: Optional[TravelMode] = None
     destination_quote: Optional[str] = None
     cannot_check: list[str] = Field(default_factory=list)
+    own_bathroom: Optional[Importance] = None
+    own_bathroom_quote: Optional[str] = None
 
 
 _STOP = {"a", "an", "the", "to", "of", "in", "and", "near", "close", "by", "my", "is", "be", "for", "with"}
@@ -217,6 +221,14 @@ def validate_wishes(raw_json: str, text: str) -> Wishes:
     # A budget is not a rent importance; only keep a rent rating that has its own words.
     if "budget" in out.evidence and out.evidence.get("rent") == out.evidence["budget"]:
         del out.weights["rent"], out.evidence["rent"]
+
+    if reply.own_bathroom:
+        q = reply.own_bathroom_quote or ""
+        if quote_in_text(q, text) and "bath" in _normalize(q):
+            want = Want(kind="bathroom", what="own bathroom", weight=IMPORTANCE_WEIGHTS[reply.own_bathroom], quote=q)
+            (out.drop if reply.own_bathroom == "none" else out.wants).append(want)
+        else:
+            out.not_understood.append(q or "own bathroom")
 
     out.cannot_check = [q for q in reply.cannot_check if quote_in_text(q, text)]
     return out
@@ -373,8 +385,11 @@ def want_facts_for(listings: list[Listing], roommates: list[Roommate]) -> dict[t
     """
     near = sorted({w.what for r in roommates for w in r.wants if w.kind == "near"})
     features = sorted({w.what for r in roommates for w in r.wants if w.kind == "feature"})
-    if not near and not features:
+    if not near and not features and not any(w.kind == "bathroom" for r in roommates for w in r.wants):
         return {}
+    # Own bathroom: one each for everyone who asked, plus one shared by everyone else (if anyone else).
+    own = sum(1 for r in roommates if any(w.kind == "bathroom" for w in r.wants))
+    bathrooms_needed = own + (1 if own < len(roommates) else 0)
 
     def facts_for_listing(listing: Listing) -> tuple[dict, dict]:
         places = {}
@@ -389,8 +404,11 @@ def want_facts_for(listings: list[Listing], roommates: list[Roommate]) -> dict[t
     result = {}
     for li, (places, feats) in enumerate(per_listing):
         for ri, r in enumerate(roommates):
-            result[(li, ri)] = [places.get(w.what) if w.kind == "near" else feats.get(w.what)
-                                for w in r.wants]
+            result[(li, ri)] = [
+                places.get(w.what) if w.kind == "near"
+                else {"bathrooms": listings[li].bathrooms, "needed": bathrooms_needed} if w.kind == "bathroom"
+                else feats.get(w.what)
+                for w in r.wants]
     return result
 
 

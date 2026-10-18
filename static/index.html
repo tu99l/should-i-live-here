@@ -61,6 +61,15 @@
         <input id="homeBase" type="text" value="UCLA" maxlength="120" autocomplete="off"
                placeholder="A campus, an office or a neighborhood" onchange="setHome(this.value)">
       </label>
+      <div class="search-row">
+        <button class="secondary" id="searchBtn" type="button">Find real listings near here</button>
+        <label class="search-radius">within
+          <select id="searchRadius" aria-label="Search radius">
+            <option value="1">1 mi</option><option value="2" selected>2 mi</option><option value="3">3 mi</option><option value="5">5 mi</option>
+          </select>
+        </label>
+      </div>
+      <div id="searchStatus" class="status"></div>
       <p class="hint">Set each person's max rent, where they need to get to and how, and how much each thing matters (0 = don't care, 5 = deal-breaker).</p>
       <div id="roommates"></div>
       <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
@@ -101,5 +110,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/invite.js"></script>
+  <script src="/static/search.js"></script>
 </body>
 </html>

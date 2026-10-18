@@ -43,7 +43,9 @@ FEATURE_SCORES = {True: 1.0, False: 0.0}
 
 
 def want_criterion(want) -> str:
-    """Name of a wish in the breakdown, e.g. "near: gym" or "has: gas included"."""
+    """Name of a wish in the breakdown, e.g. "near: gym", "has: gas included" or "own bathroom"."""
+    if want.kind == "bathroom":
+        return "own bathroom"
     return f"{'near' if want.kind == 'near' else 'has'}: {want.what}"
 
 
@@ -56,6 +58,12 @@ def want_score(want, fact: Optional[dict]):
     if want.kind == "near":
         minutes = (fact or {}).get("walk_minutes")
         return minutes, None if minutes is None else _linear(minutes, NEAR_BEST_MINUTES, NEAR_WORST_MINUTES)
+    if want.kind == "bathroom":
+        # Own bathroom: enough bathrooms for everyone who asked for one (wishes.want_facts_for counts them).
+        baths, needed = (fact or {}).get("bathrooms"), (fact or {}).get("needed")
+        if baths is None or not needed:
+            return baths, None
+        return baths, 1.0 if baths >= needed else 0.0
     value = (fact or {}).get("value")
     return value, FEATURE_SCORES.get(value) if value is not None else None
 
@@ -130,6 +138,8 @@ def score_listing(listing: Listing, roommate: Roommate, group_size: int,
         detail = {"kind": want.kind, "asked": want.quote}
         if want.kind == "near":
             detail["place_name"] = (fact or {}).get("name")
+        elif want.kind == "bathroom":
+            detail["needed"] = (fact or {}).get("needed")
         else:
             detail["evidence"] = (fact or {}).get("quote")
         rows.append((want_criterion(want), raw_value, s, want.weight, detail))

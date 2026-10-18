@@ -139,6 +139,8 @@ def _reason_text(reason: dict) -> str:
         return f"a {raw:.0f}-minute walk to {reason.get('place_name') or 'the nearest ' + c.split(': ', 1)[1]}"
     if reason.get("kind") == "feature":
         return f"no {c.split(': ', 1)[1]} (listing says \"{reason.get('evidence')}\")"
+    if reason.get("kind") == "bathroom":
+        return f"only {raw:g} bathrooms when {reason.get('needed')} are needed for own bathrooms"
     if c == "rent":
         return f"rent at {_money(raw)} each"
     if c == "commute":
@@ -154,7 +156,11 @@ def _reasons_text(reasons: list[dict]) -> str:
 
 def _wish_status(row: dict) -> str:
     """How the pick does on one of this roommate's own wishes."""
-    name = row["criterion"].split(": ", 1)[1]
+    name = row["criterion"].split(": ", 1)[-1]
+    if row.get("kind") == "bathroom":
+        if row["unknown"]:
+            return "own bathroom: unknown"
+        return f"own bathroom: {'yes' if row['criterion_score'] else 'no'} ({row['raw_value']:g} baths, {row.get('needed')} needed)"
     if row["unknown"]:
         return f"{name}: listing doesn't say" if row.get("kind") == "feature" else f"{name}: unknown"
     if row.get("kind") == "near":

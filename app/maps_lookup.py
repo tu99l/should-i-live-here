@@ -168,9 +168,12 @@ def nearest_place(lat: float, lng: float, what: str) -> Optional[dict]:
     return {"name": nearest.get("displayName", {}).get("text"), "walk_minutes": walk["minutes"]}
 
 
-def lookup(place: Place) -> dict:
-    """Everything the map card needs from Google for one listing. Missing values stay None."""
-    campus = {"address": destination()}
+def lookup(place: Place, dest: Optional[str] = None) -> dict:
+    """Everything the map card needs from Google for one listing. Missing values stay None.
+
+    Walk and bike times go to `dest` (the group's place), else the default destination (campus).
+    """
+    campus = {"address": dest or destination()}
     walk = route(place, campus, "WALK")
     bike = route(place, campus, "BICYCLE")
     lat = place.get("lat") if place.get("lat") is not None else (walk or {}).get("origin_lat")
@@ -236,26 +239,50 @@ def commutes_for(listings, roommates) -> dict[tuple[int, int], Optional[float]]:
     """{(listing index, roommate index): minutes} for each roommate's own place and travel mode.
 
     A roommate with no place set uses the default destination (campus). For walking or biking
-    there, the minutes already saved on each listing are reused, so the demo needs no calls.
+    there, the minutes already saved on a listing are reused when they were measured to that same
+    place (demo listings: no calls). Anything else (listings from a live search, minutes to another
+    city) is asked from Google's Route Matrix, cached.
     """
     default = destination()
     result: dict[tuple[int, int], Optional[float]] = {}
     groups: dict[tuple[str, str], list[int]] = {}
     for ri, r in enumerate(roommates):
         place = (r.place or "").strip()
-        if not place and r.travel_mode in ("WALK", "BICYCLE"):
-            field = "walk_minutes" if r.travel_mode == "WALK" else "bike_minutes"
-            for li, l in enumerate(listings):
-                result[(li, ri)] = getattr(l, field)
-        else:
-            groups.setdefault((place or default, r.travel_mode), []).append(ri)
+        groups.setdefault((place or default, r.travel_mode), []).append(ri)
 
     for (dest, mode), roommate_indexes in groups.items():
-        located = [li for li, l in enumerate(listings) if (l.lat is not None and l.lng is not None) or l.address]
+        field = {"WALK": "walk_minutes", "BICYCLE": "bike_minutes"}.get(mode)
+        saved, ask = {}, []
+        for li, l in enumerate(listings):
+            measured_to = (l.commute_to or default).strip().casefold()
+            value = getattr(l, field) if field else None
+            if value is not None and measured_to == dest.casefold():
+                saved[li] = value
+            elif (l.lat is not None and l.lng is not None) or l.address:
+                ask.append(li)
         origins = [{"lat": listings[li].lat, "lng": listings[li].lng} if listings[li].lat is not None
-                   else {"address": listings[li].address} for li in located]
-        minutes = dict(zip(located, commute_minutes(origins, dest, mode)))
+                   else {"address": listings[li].address} for li in ask]
+        minutes = {**saved, **dict(zip(ask, commute_minutes(origins, dest, mode) if ask else []))}
         for ri in roommate_indexes:
             for li in range(len(listings)):
                 result[(li, ri)] = minutes.get(li)
     return result
+
+
+def find_place(text: str) -> Optional[dict]:
+    """A place people typed ("UCLA", "Santa Monica Pier") -> {name, formatted_address, lat, lng}, or None.
+
+    Google decides what the words mean; we only pass along its answer. Cached like every Google call.
+    """
+    text = " ".join(text.split())
+    if not text:
+        return None
+    reply = _post("near", SEARCH_TEXT_URL, "places.displayName,places.formattedAddress,places.location",
+                  {"textQuery": text, "pageSize": 1})
+    places = (reply or {}).get("places") or []
+    if not places:
+        return None
+    p = places[0]
+    return {"name": p.get("displayName", {}).get("text") or text,
+            "formatted_address": p.get("formattedAddress"),
+            "lat": p["location"]["latitude"], "lng": p["location"]["longitude"]}

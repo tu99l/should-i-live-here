@@ -43,6 +43,16 @@ class Listing(ListingFacts):
     # The listing's own words (pasted text, or the notes saved for demo listings).
     # "Does it have X?" questions are answered only from this text, with a quote.
     source_text: Optional[str] = None
+    # Where the listing came from: "demo", "pasted" or "rentcast" (a live search, see rentcast.py).
+    source: Optional[str] = None
+    property_type: Optional[str] = None
+    square_feet: Optional[float] = None
+    # The price exactly as listed. Usually the same as rent_total_monthly; when rentcast.py suspects
+    # the price is for ONE room (see price_check), rent_total_monthly is left unknown and only this is kept.
+    listed_price: Optional[float] = None
+    price_check: Optional[Literal["possible_per_room"]] = None
+    # Where walk_minutes / bike_minutes are measured to. None = the default destination (campus).
+    commute_to: Optional[str] = None
     evidence: dict[str, str] = Field(default_factory=dict, description="Exact quote from the listing for each extracted fact")
 
 
@@ -70,7 +80,7 @@ class Want(BaseModel):
                     listing text with an exact quote, else unknown.
     """
 
-    kind: Literal["near", "feature"]
+    kind: Literal["near", "feature", "bathroom"]  # "bathroom" = they want their own bathroom.
     what: str = Field(..., min_length=1, max_length=100)
     weight: float = Field(3, ge=0, le=5)
     quote: Optional[str] = Field(None, description="The roommate's own words that asked for it")
@@ -91,6 +101,8 @@ class Roommate(BaseModel):
 
 class ParseRequest(BaseModel):
     text: str
+    # The group's place ("Santa Monica Pier"). Walk/bike times on the card go there. Blank = campus.
+    destination: Optional[str] = Field(None, max_length=200)
 
 
 class DecideRequest(BaseModel):

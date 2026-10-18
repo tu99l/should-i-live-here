@@ -42,3 +42,11 @@
 .wish-chip.must { border-color: var(--gold); background: var(--gold-soft); }
 .group-row .resend { font-size: 11.5px; color: var(--blue); text-decoration: none; }
 .group-row .resend:hover { text-decoration: underline; }
+
+/* "Find real listings near here" (static/search.js) */
+.search-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap; }
+.search-row .secondary { flex: 1; min-width: 0; }
+.search-radius { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.search-radius select { font: 12.5px var(--body); padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px;
+                        color: var(--ink); background: var(--panel); }
+.search-flag { display: block; margin-top: 4px; color: var(--warn); font-weight: 600; }
