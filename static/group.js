@@ -206,12 +206,12 @@
     try {
       const data = await api("POST", "/api/roommates/invite", {
         name: el("inviteName").value.trim(), phone: el("invitePhone").value.trim(),
-        email: el("inviteEmail").value.trim() || null,
       });
       s.className = "status ok";
-      s.textContent = `${data.name} is in the group. Their card fills in when they text.` + (data.email_invite ? " Photon also emailed them an invite." : "");
-      next.innerHTML = `<b>Last step: ${h(data.name)} sends one text.</b> The bot can't text first, so ask them to text
-        <div class="line-number">${h(prettyPhone(data.line))}</div>with this message (the button fills it in on a phone):
+      s.textContent = `${data.name} is in the group. Their card fills in when they text.`;
+      next.innerHTML = `<b>Last step: ${h(data.name)} sends one text</b> from their iPhone's Messages app
+        (the bot can't text first, and it's iMessage only) to
+        <div class="line-number">${h(prettyPhone(data.line))}</div>Any message works, for example:
         <span class="starter">${h(data.starter_text)}</span>
         <div class="invite-actions"><a href="${h(data.text_link)}">Open in Messages</a>
           <button type="button" id="copyInvite">Copy number and message</button></div>`;

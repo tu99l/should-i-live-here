@@ -103,11 +103,11 @@
       <div id="roommates"></div>
       <div class="add-card">
         <div class="add-card-title">+ Add a roommate</div>
-        <p class="hint">They get a number to text. Whatever they text (now or any time later) fills in their card.</p>
+        <p class="hint">Adding their phone lets them text our bot (it only answers numbers added here).
+          They send one text from an iPhone to start; whatever they text after that fills in their card.</p>
         <form id="inviteForm" class="invite-form" autocomplete="off">
           <label>Name<input id="inviteName" required maxlength="40" placeholder="Sam"></label>
           <label>Phone<input id="invitePhone" type="tel" required maxlength="30" placeholder="(424) 555-0123"></label>
-          <label class="wide">Email <span class="tip-sub">optional, Photon emails them an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@example.com"></label>
           <button class="secondary" id="inviteBtn" type="submit">Add to the group</button>
         </form>
         <div id="inviteStatus" class="status"></div>
