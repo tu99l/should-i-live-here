@@ -19,6 +19,36 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | 12 | Demo video on YouTube | Teammate | 9:00 AM | todo |
 | 13 | Devpost submitted with both teammates added | Both | 11:00 AM | todo |
 
+## START HERE, Tu: latest state (Sat Oct 17, ~11:45 PM). Feature freeze: fixes and polish only from now
+**The app, as it works now** (all tested on real phones with Freddy and Tu):
+1. Welcome screen: "What are you looking for?" in your own words, where you go, how many people, your name.
+2. Map with real rentals near that place (RentCast) plus the 12 demo listings. Pick shown and updated by itself.
+3. "Your group": one card per person. Only your own card is editable. "+ Add a roommate" (name + phone; no email).
+   They text the bot once from an iPhone (iMessage only, the bot can't text first); their texts fill their card.
+4. Texting the bot: welcome with a checklist of what to mention; every later text adds or changes wishes;
+   "pick" replies with the pick and the map link; when someone's text changes the pick, everyone else gets an
+   "Update" text (at most one per person every 3 minutes, always the newest pick); photos get "I can only read text".
+5. View-only map link for roommates' phones (`scripts/share_link.py`): pick, map, scores, ranking, who wants what.
+6. Section 4 is now "Found a place somewhere else?" (collapsed): paste a listing to add laundry/parking/utilities facts.
+7. Safety: removing someone, "Load demo group" and "Start over" all need a second click.
+8. Scoring changes tonight: rent reaches zero at 2x the budget (budgets below market still matter); a stated max rent
+   makes rent "important"; a pick missing rent/bedrooms/bathrooms gets a ⚠ and a fully known alternative.
+
+**Stress-tested** (for the Devpost "how we built it"): 730 requests at once, two programs editing the group at the same
+time (300 edits, none lost), hostile input, every route through the public link (only the results page answers),
+a 100-text flood, Photon failures (no double texts, failed replies retried), no internet (the demo still works).
+132 automated tests.
+
+**Tu's to-do** (no code files need touching; restyle freely if you want):
+- [ ] Devpost write-up: what it does, how it works (Gemini only reads words, our code scores, Google measures,
+      RentCast finds listings, Photon carries texts), what's next (hosted multi-group version, laundry/parking data).
+- [ ] Demo video (2–3 min): welcome text -> real listings -> add a roommate -> they text -> their card fills ->
+      the pick flips and everyone gets the Update text -> they open the map link on their phone. Record a backup.
+- [ ] README: setup (`.env` keys: Gemini, Google Maps, RentCast, Photon; `brew install cloudflared`) and how to run
+      the app, the bot (`.venv/bin/python -m app.photon_bot`) and the share link.
+- [ ] Thumbnail (5:3).
+- Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
+
 ## Code that must change to match the brief
 The starter code was written before the brief, so it uses different names. Fix these as part of steps 2 to 6:
 - Done: `app/parser.py` is now `app/extract.py` with the brief's schema. `/api/parse` still returns the old Listing shape (via `to_listing_fields`) plus a new `evidence` field, until step 3.
