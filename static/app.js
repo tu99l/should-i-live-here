@@ -437,15 +437,39 @@ async function parseListing() {
 }
 
 // ---------- Welcome screen ----------
-function enterApp() {
-  const w = document.getElementById("welcome");
-  w.classList.add("leaving");
-  setTimeout(() => { w.hidden = true; map.invalidateSize(); }, 450);
-  if (location.hash !== "#app") history.replaceState(null, "", "#app");
+// The address decides the screen: "#app" shows the app, anything else shows the welcome page. So the
+// Start button, the header title link, Back/Forward and a typed address all agree. The welcome page
+// covers the app instead of replacing it, so roommates, ratings and the pick are kept.
+const welcomeEl = document.getElementById("welcome");
+const appParts = [document.getElementById("map"), document.querySelector("aside")];
+let welcomeTimer = null;
+
+function showScreen(animate = true) {
+  const welcome = location.hash !== "#app";
+  clearTimeout(welcomeTimer);
+  appParts.forEach(el => { el.inert = welcome; }); // Keyboard and screen readers skip what's covered.
+  if (welcome) {
+    welcomeEl.hidden = false;
+    if (animate) {
+      welcomeEl.classList.add("leaving"); // Start faded, then fade in.
+      requestAnimationFrame(() => requestAnimationFrame(() => welcomeEl.classList.remove("leaving")));
+    }
+    document.getElementById("welcomeStart").focus({ preventScroll: true });
+  } else if (!welcomeEl.hidden) {
+    const hide = () => { welcomeEl.hidden = true; welcomeEl.classList.remove("leaving"); map.invalidateSize(); };
+    if (animate) { welcomeEl.classList.add("leaving"); welcomeTimer = setTimeout(hide, 450); } else hide();
+    document.getElementById("homeLink").focus({ preventScroll: true });
+  }
 }
-// Skip the welcome screen when the URL ends in #app (handy while working on the page).
-if (location.hash === "#app") document.getElementById("welcome").hidden = true;
-else document.getElementById("welcomeStart").focus();
+
+// A new history step, so the browser's Back button returns to the welcome page.
+function enterApp() { location.hash = "app"; }
+
+window.addEventListener("hashchange", () => showScreen());
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !welcomeEl.hidden) enterApp();
+});
+showScreen(false);
 
 // ---------- Start ----------
 renderRoommates();
