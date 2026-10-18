@@ -44,8 +44,9 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
       RentCast finds listings, Photon carries texts), what's next (hosted multi-group version, laundry/parking data).
 - [ ] Demo video (2–3 min): welcome text -> real listings -> add a roommate -> they text -> their card fills ->
       the pick flips and everyone gets the Update text -> they open the map link on their phone. Record a backup.
-- [ ] README: setup (`.env` keys: Gemini, Google Maps, RentCast, Photon; `brew install cloudflared`) and how to run
-      the app, the bot (`.venv/bin/python -m app.photon_bot`) and the share link.
+- [x] README setup written by Freddy (install, keys table, the three commands, trying it with a roommate,
+      demo-day checklist, troubleshooting). Tu: update "How it decides" at the top (it still says "price type"
+      and only mentions pasting) and restyle any wording you like.
 - [ ] Thumbnail (5:3).
 - Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
 
