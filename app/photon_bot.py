@@ -35,8 +35,9 @@ STATE_FILE = CACHE_DIR / "bot" / "state.json"  # Which texts were answered. Peop
 API = "https://api.photon.codes/v1"
 POLL_SECONDS = 2
 
-HELP = ("Text me what you want in a place, in your own words, e.g. \"close to a gym, laundry included, "
-        "need gas and water included\" or \"laundry 5, rent 3\". I'll find the fairest pick for the group.\n"
+HELP = ("Text me what you want in a place, in your own words: max rent, own bedroom or bathroom, laundry, parking, "
+        "what you want nearby (gym, groceries, coffee, parks), where you go most days and how. "
+        "Text again anytime to add or change something.\n"
         "\"pick\" = current pick, \"reset\" = clear your wishes.")
 
 
@@ -284,11 +285,18 @@ def _text_of(message: dict) -> Optional[str]:
 
 
 def greeting(name: str, group: group_store.Group) -> str:
+    """The first text someone gets: who we are, and what to tell us (only things we can actually check)."""
     names = [p.name for p in group.people]
-    group = ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 1 else names[0]
-    return (f"Hi {name}! I'm the apartment bot for {group}. I'll find the place that's fairest for everyone.\n"
-            "What do you want in a place? Say it however you like, e.g. \"close to a gym, in-unit laundry, "
-            "need gas and water included, under $1,500\". Text \"pick\" anytime for the current pick.")
+    group_names = ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 1 else names[0]
+    return (f"Hi {name}! I'm the apartment bot for {group_names}. I'll find the place that's fairest for everyone.\n"
+            "Tell me in your own words, as much or as little as you like:\n"
+            "• Your max rent per month\n"
+            "• Own bedroom? Own bathroom?\n"
+            "• Laundry (in-unit?) and parking (free?)\n"
+            "• What you want nearby: gym, grocery store, coffee, parks…\n"
+            "• Where you go most days and how (walk, bike, transit, drive)\n"
+            "• Anything that's a deal-breaker\n"
+            "You can text again anytime to add or change something. Text \"pick\" to see the current pick.")
 
 
 def process(photon: Photon, state: dict, log=print) -> int:

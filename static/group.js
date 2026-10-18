@@ -1,7 +1,7 @@
 // "Your group": one card per person, from the group the backend shares with the iMessage bot.
-// - You come from the welcome screen; others are invited by text or added here (for people without a phone).
+// - You come from the welcome screen; everyone else is added by phone and fills in their card by texting the bot.
 // - A card shows what that person asked for, in chips (hover for their exact words), their budget and commute.
-//   There is no 0–5 grid to fill in: their words set the weights; "See the math" shows them.
+//   Only your own card can be edited here. There is no 0–5 grid: words set the weights; "See the math" shows them.
 // - The page checks the group every few seconds. When someone texts the bot, their card fills in and the
 //   fair pick updates by itself.
 // Uses app.js's shared state: roommates (kept in step with the group), listings, home, runDecision,
@@ -64,36 +64,45 @@
     return '<span class="chip-status none">Added here</span>';
   }
 
+  // Your card (you're at this computer) can be edited. Everyone else's fills in from their texts only.
   function card(p, i) {
     const r = p.roommate;
     const name = h(p.name);
-    const placeholder = `Going to: ${h(group.place)} (or type another)`;
     const wishes = chips(r);
+    const goingTo = h(r.place || group.place);
+    const mode = MODES[r.travel_mode] || "walking";
     const math = Object.keys(CRITERIA).map(c => `<tr><td>${CRITERIA[c]}</td><td class="num">${r.weights[c]}</td></tr>`).join("") +
       (r.wants || []).map(x => `<tr><td>${h(x.kind === "near" ? "near " + x.what : x.what)}</td><td class="num">${x.weight}</td></tr>`).join("");
-    return `<div class="person" data-i="${i}">
+    const facts = p.me
+      ? `<div class="person-facts">
+          <label class="budget">up to $<input type="number" min="1" step="any" value="${r.budget}" data-act="budget" aria-label="Your max rent per month"></label>
+          <input type="text" class="person-place" value="${h(r.place || "")}" placeholder="Going to: ${h(group.place)} (or type another)" data-act="place" aria-label="Where you need to get to">
+          <select data-act="mode" aria-label="How you get there">
+            ${Object.entries(MODES).map(([m, w]) => `<option value="${m}"${r.travel_mode === m ? " selected" : ""}>${w[0].toUpperCase() + w.slice(1)}</option>`).join("")}
+          </select>
+        </div>`
+      : `<div class="person-line">Up to <b>$${Math.round(r.budget).toLocaleString("en-US")}</b>/mo · ${goingTo}, ${mode}</div>`;
+    let empty = "";
+    if (!wishes) {
+      empty = p.me ? "Nothing yet. Add what you want below."
+        : p.line ? `Waiting for ${name} to text <b class="line-inline">${h(prettyPhone(p.line))}</b>. <a href="${h(p.text_link)}">Text link</a>`
+        : "Nothing yet.";
+    }
+    return `<div class="person${p.me ? " is-me" : ""}" data-i="${i}">
       <div class="person-head">
         <span class="person-name">${name}</span>
         ${p.phone_last4 ? `<span class="digits">•••• ${h(p.phone_last4)}</span>` : ""}
         ${status(p)}
-        <button class="remove" title="Remove ${name}" aria-label="Remove ${name}" data-act="remove">×</button>
+        ${p.me ? "" : `<button class="remove" title="Remove ${name}" aria-label="Remove ${name}" data-act="remove">×</button>`}
       </div>
-      <div class="person-facts">
-        <label class="budget">up to $<input type="number" min="1" step="any" value="${r.budget}" data-act="budget" aria-label="${name}'s max rent per month"></label>
-        <input type="text" class="person-place" value="${h(r.place || "")}" placeholder="${placeholder}" data-act="place" aria-label="Where ${name} needs to get to">
-        <select data-act="mode" aria-label="How ${name} gets there">
-          ${Object.entries(MODES).map(([m, w]) => `<option value="${m}"${r.travel_mode === m ? " selected" : ""}>${w[0].toUpperCase() + w.slice(1)}</option>`).join("")}
-        </select>
-      </div>
-      ${wishes ? `<div class="wish-chips">${wishes}</div>` : `<div class="person-empty">${p.line && !p.connected
-          ? `Nothing yet. They text ${h(prettyPhone(p.line))} to start. <a href="${h(p.text_link)}">Text link</a>`
-          : "Nothing yet. Add what they want below."}</div>`}
+      ${facts}
+      ${wishes ? `<div class="wish-chips">${wishes}</div>` : `<div class="person-empty">${empty}</div>`}
       ${p.last_text ? `<div class="person-said">“${h(p.last_text)}”</div>` : ""}
       ${notes[p.name] ? `<div class="person-note">${notes[p.name]}</div>` : ""}
-      <form class="person-ask" data-act="wishes">
-        <input type="text" maxlength="600" placeholder="${p.me ? "Add more of what you want" : `What does ${name} want?`}" aria-label="What ${name} wants">
+      ${p.me ? `<form class="person-ask" data-act="wishes">
+        <input type="text" maxlength="600" placeholder="Add more of what you want" aria-label="Add more of what you want">
         <button class="secondary" type="submit">Add</button>
-      </form>
+      </form>` : ""}
       <details class="person-math"><summary>See the math</summary>
         <table><tr><th>What</th><th class="num">Weight (0–5)</th></tr>${math}</table>
         <div class="hint">Weights come from their words: must 5, important 4.5, wanted 4, neutral 3, nice to have 2, don't care 0.</div>
@@ -105,7 +114,7 @@
     const box = el("roommates");
     if (!group) return;
     if (!group.people.length) {
-      box.innerHTML = '<div class="empty">Nobody in the group yet. Start from the welcome screen, invite someone below, or load the demo group.</div>';
+      box.innerHTML = '<div class="empty">Nobody in the group yet. Start from the welcome screen, add a roommate below, or load the demo group.</div>';
       return;
     }
     box.innerHTML = group.people.map(card).join("");
@@ -187,25 +196,6 @@
 
   // ---------- Adding people ----------
 
-  async function addWithoutPhone(e) {
-    e.preventDefault();
-    const s = el("addStatus");
-    try {
-      s.className = "status";
-      s.innerHTML = '<span class="spinner"></span>Adding…';
-      const res = await api("POST", "/api/group/people", { name: el("addName").value.trim(), text: el("addWants").value.trim() || null });
-      const name = el("addName").value.trim();
-      notes[name] = understoodNote(res.understood);
-      el("addForm").reset();
-      s.className = "status ok";
-      s.textContent = `${name} is in the group.`;
-      adopt(res.group, { rerunPick: true });
-    } catch (err) {
-      s.className = "status error";
-      s.textContent = err.message;
-    }
-  }
-
   async function invite(e) {
     e.preventDefault();
     const btn = el("inviteBtn"), s = el("inviteStatus"), next = el("inviteNext");
@@ -216,10 +206,10 @@
     try {
       const data = await api("POST", "/api/roommates/invite", {
         name: el("inviteName").value.trim(), phone: el("invitePhone").value.trim(),
-        email: el("inviteEmail").value.trim() || null, budget: Number(el("inviteBudget").value) || null,
+        email: el("inviteEmail").value.trim() || null,
       });
       s.className = "status ok";
-      s.textContent = `${data.name} is on the line.` + (data.email_invite ? " Photon also emailed them an invite." : "");
+      s.textContent = `${data.name} is in the group. Their card fills in when they text.` + (data.email_invite ? " Photon also emailed them an invite." : "");
       next.innerHTML = `<b>Last step: ${h(data.name)} sends one text.</b> The bot can't text first, so ask them to text
         <div class="line-number">${h(prettyPhone(data.line))}</div>with this message (the button fills it in on a phone):
         <span class="starter">${h(data.starter_text)}</span>
@@ -270,7 +260,6 @@
   // The page's map listings, saved so the bot picks from the same places.
   window.saveListings = () => api("PUT", "/api/group/listings", { listings }).catch(() => {});
 
-  el("addForm").addEventListener("submit", addWithoutPhone);
   el("inviteForm").addEventListener("submit", invite);
   el("loadDemo").addEventListener("click", loadDemo);
   el("startOver").addEventListener("click", startOver);

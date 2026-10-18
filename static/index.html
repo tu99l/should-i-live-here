@@ -98,32 +98,22 @@
 
     <section id="group">
       <h2><span class="step">2</span>Your group</h2>
-      <p class="hint">Everyone says what they want in their own words: by text to our bot, or typed here.
-        Cards fill in by themselves when someone texts.</p>
+      <p class="hint">Everyone says what they want in their own words by texting our bot. Their card fills in
+        by itself, and updates every time they text again.</p>
       <div id="roommates"></div>
-      <details class="add-people">
-        <summary>+ Invite someone by text</summary>
+      <div class="add-card">
+        <div class="add-card-title">+ Add a roommate</div>
+        <p class="hint">They get a number to text. Whatever they text (now or any time later) fills in their card.</p>
         <form id="inviteForm" class="invite-form" autocomplete="off">
           <label>Name<input id="inviteName" required maxlength="40" placeholder="Sam"></label>
           <label>Phone<input id="invitePhone" type="tel" required maxlength="30" placeholder="(424) 555-0123"></label>
-          <label>Email <span class="tip-sub">optional, sends an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@example.com"></label>
-          <label>Max rent <span class="tip-sub">optional</span><input id="inviteBudget" type="number" min="1" step="any" placeholder="1500"></label>
-          <button class="secondary" id="inviteBtn" type="submit">Add to the group text</button>
+          <label class="wide">Email <span class="tip-sub">optional, Photon emails them an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@example.com"></label>
+          <button class="secondary" id="inviteBtn" type="submit">Add to the group</button>
         </form>
         <div id="inviteStatus" class="status"></div>
         <div id="inviteNext" class="invite-next" hidden></div>
-      </details>
-      <details class="add-people">
-        <summary>+ Add someone without a phone</summary>
-        <form id="addForm" class="invite-form" autocomplete="off">
-          <label class="wide">Name<input id="addName" required maxlength="40" placeholder="Jordan"></label>
-          <label class="wide">What do they want? <span class="tip-sub">their words</span>
-            <input id="addWants" maxlength="600" placeholder="In-unit laundry is a must, up to $1,700"></label>
-          <button class="secondary" type="submit">Add to the group</button>
-        </form>
-        <div id="addStatus" class="status"></div>
-      </details>
-      <div class="group-links"><a href="#" id="loadDemo" class="link">Load demo group</a> · <a href="#" id="startOver" class="link">Start over</a></div>
+      </div>
+      <div class="group-links"><a href="#" id="loadDemo" class="link">Load demo group</a> (no phones needed) · <a href="#" id="startOver" class="link">Start over</a></div>
     </section>
 
     <section>
