@@ -89,7 +89,7 @@ def test_budget_must_be_in_the_quote_and_is_not_a_rent_rating(monkeypatch):
     fake_gemini(monkeypatch, [reply])
     w = wishes.parse_wishes(text)
     assert w.budget == 1400
-    assert "rent" not in w.weights  # A budget alone doesn't say how much price matters.
+    assert w.weights["rent"] == 4.5  # A stated max rent makes rent important (their own words).
 
     made_up = json.dumps({"budget": 1500, "budget_quote": "my max is $1,400"})
     w = wishes.validate_wishes(made_up, text)
@@ -208,3 +208,11 @@ def test_how_they_get_to_campus_is_read_only_from_their_own_words():
     assert wishes.validate_wishes(ok, text).travel_mode == "TRANSIT"
     made_up = json.dumps({"travel_mode": "DRIVE", "travel_mode_quote": "through transit"})
     assert wishes.validate_wishes(made_up, text).travel_mode is None  # They never said drive.
+
+
+def test_saying_rent_doesnt_matter_beats_the_budget_rule():
+    text = "my max is $2,000 but honestly price doesn't matter much"
+    reply = json.dumps({"budget": 2000, "budget_quote": "my max is $2,000",
+                        "core": [{"criterion": "rent", "importance": "low", "quote": "price doesn't matter much"}]})
+    w = wishes.validate_wishes(reply, text)
+    assert w.budget == 2000 and w.weights["rent"] == 2

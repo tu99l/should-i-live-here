@@ -110,6 +110,16 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
+## Demo moments (current, after the Oct 17 rent-scale change) — use these, older notes below are outdated
+Rent now reaches zero at twice the budget (was 125%), so over-budget places still rank by how far over, and a stated
+max rent ("my max is $1,000") makes rent "important". With **Load demo group** (Alex, Sam, Jordan):
+- The pick is **547 Landfair**. Sam's laundry 3 -> 5 (or Sam texting "in-unit laundry is a must") moves it to
+  **1824 Fairburn** (in-unit laundry).
+- Alex's budget $1,500 -> $1,200 moves it to **424 Landfair**, the cheapest ($1,083 each): budgets matter now.
+- If the fairest place doesn't state rent, bedrooms or bathrooms, it shows "⚠ The listing doesn't say its rent..."
+  with the fairest fully known place next to it.
+(Both moments are checked by `tests/test_group.py::test_changing_one_roommates_weights_can_flip_the_pick`.)
+
 ## View-only results link for roommates — done by Freddy (Tu: restyle `static/share.css` freely)
 - Run the app, then `.venv/bin/python scripts/share_link.py` (needs `brew install cloudflared`). It prints a link like
   `https://<random>.trycloudflare.com/share/<secret>` and the page shows it under the pick ("Share with your group").

@@ -36,14 +36,15 @@ def test_fairest_pick_protects_least_happy_roommate():
 
 
 def test_maximin_beats_a_higher_average():
-    # "split" gives A 100 and B 30 (average 65); "even" gives both 50 (average 50). Maximin picks "even".
-    split = make_listing(id="split", rent_total_monthly=1900, walk_minutes=31)
-    even = make_listing(id="even", rent_total_monthly=2600, walk_minutes=25)
+    # "split" gives A 100 and B 40 (average 70); "even" gives A 55.4 and B 50 (average 52.7).
+    # The higher average leaves B worse off, so maximin picks "even".
+    split = make_listing(id="split", rent_total_monthly=1900, walk_minutes=28)
+    even = make_listing(id="even", rent_total_monthly=3400, walk_minutes=25)
     a, b = person("A", budget=1300, rent=5), person("B", commute=5)
     result = decide([split, even], [a, b])
     by_id = {r["listing_id"]: r for r in result["ranking"]}
-    assert by_id["split"]["avg_score"] == 65 and by_id["split"]["min_score"] == 30
-    assert by_id["even"]["avg_score"] == 50 and by_id["even"]["min_score"] == 50
+    assert by_id["split"]["avg_score"] == 70 and by_id["split"]["min_score"] == 40
+    assert by_id["even"]["avg_score"] == 52.7 and by_id["even"]["min_score"] == 50
     assert result["pick"]["listing_id"] == "even"
 
 
@@ -111,20 +112,24 @@ def test_partial_data_is_flagged_in_the_ranking():
 
 
 def test_changing_one_roommates_weights_can_flip_the_pick():
-    # The demo story with the map's default roommates and real Google walk times:
-    # Sam raises "laundry" from 3 to 5, and the fair pick moves from 424 Landfair (shared laundry)
-    # to 1824 Fairburn (in-unit laundry). If demo data changes, rerun the search and update this.
+    # The demo story with the demo group ("Load demo group") and real Google walk times:
+    # Sam raises laundry from 3 to 5, and the fair pick moves from 547 Landfair (shared laundry)
+    # to 1824 Fairburn (in-unit laundry). If demo data or scoring changes, rerun and update this.
+    from app.group_store import demo_people
     data = json.loads((Path(__file__).parent.parent / "data" / "demo_listings.json").read_text())
     listings = [Listing(**d) for d in data]
-    alex = person("Alex", budget=1500, rent=5, commute=2, laundry=3, parking=1, bedrooms=3)
-    jordan = person("Jordan", budget=1700, rent=3, commute=3, laundry=5, parking=2, bedrooms=3)
 
-    def pick(sam_laundry):
-        sam = person("Sam", budget=1900, rent=2, commute=5, laundry=sam_laundry, parking=4, bedrooms=3)
-        return decide(listings, [alex, sam, jordan])["pick"]["listing_id"]
+    def pick(sam_laundry=3, alex_budget=1500):
+        people = [p.roommate for p in demo_people()]
+        people[1].weights.laundry = sam_laundry
+        people[0].budget = alex_budget
+        return decide(listings, people)["pick"]["listing_id"]
 
-    assert pick(3) == "landfair-424"
-    assert pick(5) == "fairburn-1824"
+    assert pick() == "landfair-547"
+    assert pick(sam_laundry=5) == "fairburn-1824"
+    # A lower budget now matters even when every place is over it: Alex at $1,200 moves the pick
+    # to the cheapest place, 424 Landfair ($1,083 each).
+    assert pick(alex_budget=1200) == "landfair-424"
 
 
 def test_each_roommate_is_judged_on_their_own_commute():

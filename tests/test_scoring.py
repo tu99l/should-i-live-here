@@ -46,8 +46,11 @@ def test_criterion_rules():
     assert s("parking", parking="paid") == 0.5 and s("parking", parking="none") == 0.0
     assert s("bedrooms", bedrooms=1) == 0.0 and s("bedrooms", bedrooms=3) == 1.0
     assert s("commute", walk_minutes=40) == 0.0 and s("commute", walk_minutes=25) == 0.5
-    # $1,000 each = 100% of a $1,000 budget, halfway between 75% (full) and 125% (zero).
-    assert s("rent", rent_total_monthly=2000) == 0.5
+    # $1,375 each = 137.5% of a $1,000 budget, halfway between 75% (full) and 200% (zero).
+    assert s("rent", rent_total_monthly=2750) == 0.5
+    # Over budget still ranks by how far over: 150% beats 180%, and only 200%+ scores zero.
+    assert s("rent", rent_total_monthly=3000) > s("rent", rent_total_monthly=3600) > 0
+    assert s("rent", rent_total_monthly=4000) == 0.0
 
 
 def test_weights_change_the_ranking():

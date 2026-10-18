@@ -26,7 +26,7 @@ from .extract import _client, _model, _normalize, _numbers_in, quote_in_text
 from .models import Listing, Roommate, TravelMode, Want
 from .scoring import CRITERIA
 
-PROMPT_VERSION = "wishes-v5"
+PROMPT_VERSION = "wishes-v6"
 FEATURE_PROMPT_VERSION = "features-v1"
 
 # How an importance word becomes a 0-5 weight. Our numbers, not the model's.
@@ -50,6 +50,7 @@ _CRITERION_WORDS = {"rent": "rent", "price": "rent", "commute": "commute", "walk
                     "beds": "bedrooms", "bedroom": "bedrooms"}
 
 MAX_WANTS = 8
+BUDGET_MEANS = "high"  # A stated max rent makes rent at least this important ("important", 4.5).
 
 # Words that must appear in their quote for us to accept how they travel.
 MODE_WORDS = {"WALK": ("walk",), "BICYCLE": ("bike", "bicycle", "cycl", "scooter"),
@@ -230,9 +231,13 @@ def validate_wishes(raw_json: str, text: str) -> Wishes:
             out.travel_mode = reply.travel_mode
             out.evidence["travel_mode"] = q
 
-    # A budget is not a rent importance; only keep a rent rating that has its own words.
-    if "budget" in out.evidence and out.evidence.get("rent") == out.evidence["budget"]:
-        del out.weights["rent"], out.evidence["rent"]
+    # Stating a max rent ("my max is $1,000") means rent matters to them: at least "important", in their own
+    # words (the budget quote). If they also said how much rent matters in other words, that wins.
+    if "budget" in out.evidence:
+        own_rent_words = out.evidence.get("rent") not in (None, out.evidence["budget"])
+        if not own_rent_words:
+            out.weights["rent"] = float(IMPORTANCE_WEIGHTS[BUDGET_MEANS])  # Not more: a budget alone isn't "must".
+            out.evidence["rent"] = out.evidence["budget"]
 
     if reply.own_bathroom:
         q = reply.own_bathroom_quote or ""

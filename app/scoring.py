@@ -14,9 +14,11 @@ from .models import Listing, Roommate
 CRITERIA = ["rent", "commute", "laundry", "parking", "bedrooms"]
 
 # Rent per person is judged against the roommate's own budget (a user input):
-# full marks at 75% of budget or less, zero at 125% of budget or more, straight line between.
+# full marks at 75% of budget or less, zero at twice the budget or more, straight line between.
+# Zero at twice (not 125%) so places over budget still rank by HOW far over: near UCLA a typical
+# 3-bedroom is ~$2,000 per person, so a $1,000 budget would otherwise score every listing 0 on rent.
 RENT_BEST_SHARE_OF_BUDGET = 0.75
-RENT_WORST_SHARE_OF_BUDGET = 1.25
+RENT_WORST_SHARE_OF_BUDGET = 2.0
 
 # Commute is minutes to the roommate's own place by their own travel mode (walk to campus by
 # default): full marks at 10 minutes or less, zero at 40 minutes or more.
