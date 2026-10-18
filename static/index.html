@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/invite.css">
+  <link rel="stylesheet" href="/static/welcome.css">
 </head>
 <body>
   <!-- Welcome screen: covers the app until "Start". Add #app to the URL to skip it. -->
@@ -19,12 +20,35 @@
       <h1 id="welcomeTitle" class="welcome-title">Should I Live <span>Here?</span></h1>
       <p class="welcome-pitch">Finding a place with roommates means someone always gives something up.
         We find the apartment that's fairest for everyone, using real facts, and show the math.</p>
+      <form id="welcomeForm" class="welcome-ask" autocomplete="off">
+        <label for="welcomeWants" class="welcome-ask-label">What are you looking for?</label>
+        <textarea id="welcomeWants" rows="3" maxlength="600"
+          placeholder="3 bedrooms, under $1,500 each, in-unit laundry, close to a gym, my own bathroom"></textarea>
+        <div class="welcome-ask-row">
+          <label>Where do you need to get to most days?
+            <input id="welcomePlace" type="text" value="UCLA" maxlength="120" placeholder="A campus, an office or a neighborhood">
+          </label>
+          <label class="narrow">People
+            <select id="welcomePeople">
+              <option value="1">Just me</option><option value="2">2</option><option value="3" selected>3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select>
+          </label>
+          <label class="narrow">Your name
+            <input id="welcomeName" type="text" maxlength="40" placeholder="You">
+          </label>
+        </div>
+        <div id="welcomeStatus" class="welcome-status" role="status"></div>
+        <div class="welcome-ask-actions">
+          <button class="primary welcome-start" id="welcomeStart" type="submit">Find our place →</button>
+          <a href="#app" id="welcomeSkip" class="welcome-skip">Skip, show the demo</a>
+        </div>
+      </form>
       <ol class="welcome-steps">
         <li><span class="step">1</span><div><b>Everyone says what matters</b>Rent, commute, laundry, parking, room for all. Or just text it in.</div></li>
         <li><span class="step">2</span><div><b>We check the facts</b>Each listing is read word by word, and walk and bike times come from Google Maps. Nothing is guessed.</div></li>
         <li><span class="step">3</span><div><b>You get the fairest pick</b>The place where the least happy roommate is happiest, and who gives up what.</div></li>
       </ol>
-      <button class="primary welcome-start" id="welcomeStart" onclick="enterApp()">Find our place →</button>
       <p class="welcome-foot">The demo starts with 12 real listings near UCLA. Live somewhere else? Type your city's spot and paste your own listings. Built at LA Hacks 2026.</p>
     </div>
     <svg class="skyline" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
@@ -70,6 +94,7 @@
         </label>
       </div>
       <div id="searchStatus" class="status"></div>
+      <div id="askedFor" class="asked-for" hidden></div>
       <p class="hint">Set each person's max rent, where they need to get to and how, and how much each thing matters (0 = don't care, 5 = deal-breaker).</p>
       <div id="roommates"></div>
       <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
@@ -111,5 +136,6 @@
   <script src="/static/app.js"></script>
   <script src="/static/invite.js"></script>
   <script src="/static/search.js"></script>
+  <script src="/static/welcome.js"></script>
 </body>
 </html>

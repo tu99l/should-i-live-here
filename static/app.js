@@ -47,6 +47,13 @@ let lastDecision = null;
 
 // ---------- Map ----------
 const map = L.map("map", { scrollWheelZoom: true }).setView(home.latlng, 14);
+// The listing card opened by a click, if any. Hover cards stay hidden until it's closed.
+let openPopup = null;
+map.on("popupopen", e => {
+  openPopup = e.popup;
+  map.eachLayer(layer => layer.closeTooltip && layer.closeTooltip());
+});
+map.on("popupclose", e => { if (openPopup === e.popup) openPopup = null; });
 // Standard OpenStreetMap tiles. The CARTO tiles from the earlier map now need an API key.
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors", maxZoom: 19,
@@ -210,7 +217,11 @@ function drawListings() {
       fillColor: color, fillOpacity: 0.95,
     }).addTo(map);
     m.bindTooltip(() => cardHtml(l, false), { className: "apt-tip", sticky: true, direction: "top", offset: [0, -4], opacity: 1 });
-    m.on("tooltipopen", e => { e.tooltip.getElement().style.borderTopColor = isPick ? PICK_GLOW : color; });
+    m.on("tooltipopen", e => {
+      // While a listing is open from a click, hovering other dots shows nothing, so they don't cover it.
+      if (openPopup) { m.closeTooltip(); return; }
+      e.tooltip.getElement().style.borderTopColor = isPick ? PICK_GLOW : color;
+    });
     // Click opens the same card as a popup, so it also works on phones where there is no hover.
     m.bindPopup(() => cardHtml(l, true), { maxWidth: 300 });
     if (isPick) m.bringToFront();
@@ -251,6 +262,7 @@ function renderRoommates() {
               class="${r.weights[f] === v ? "on" : ""}" title="${v}: ${RATING_WORDS[v]}"
               onclick="setWeight(${i}, '${f}', ${v}, this)">${v}</button>`).join("")}
           </div></div>`).join("")}
+      ${typeof wishChips === "function" ? wishChips(r) : ""}
     </div>`).join("");
 }
 

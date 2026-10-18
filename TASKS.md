@@ -110,6 +110,15 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
+## Welcome text box — done by Freddy (Tu: restyle freely)
+- Welcome screen now asks "What are you looking for?" (own words), where you need to get to, how many people,
+  your name. "Find our place →" reads the wishes (`/api/wishes`), makes them the first roommate's priorities,
+  searches real listings near the place (`/api/search`), opens the map and runs the fair pick.
+  "Skip, show the demo" keeps the old behavior. Code: `static/welcome.js`, `static/welcome.css`.
+- Sidebar shows "<name> asked for" chips (hover a chip for the exact words), and each roommate card shows its wishes.
+- Small `app.js` edits: hover cards stay hidden while a clicked listing's card is open (Freddy's request);
+  roommate cards call `wishChips(r)` when it exists.
+
 ## Real listings near any place (RentCast) — done by Freddy
 - "Find real listings near here" button under the destination box (`static/search.js`): `POST /api/search`
   `{place, radius_miles, min_bedrooms, max_rent_per_person, limit}` -> up to 40 nearest active rentals from RentCast

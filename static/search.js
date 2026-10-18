@@ -7,7 +7,9 @@
   const el = id => document.getElementById(id);
   const h = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // Returns the search result, or null if it failed (the reason is shown under the button).
   async function findListings() {
+    let found = null;
     const btn = el("searchBtn"), status = el("searchStatus");
     const place = (el("homeBase").value || "").trim() || "UCLA";
     const budgets = roommates.map(r => +r.budget).filter(b => b > 0);
@@ -26,6 +28,7 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail || "The search didn't work.");
+      found = data;
       listings = listings.filter(l => l.source !== "rentcast").concat(data.listings);
       lastDecision = null;
       showEmptyResult();
@@ -42,7 +45,9 @@
     } finally {
       btn.disabled = false;
     }
+    return found;
   }
 
   el("searchBtn").addEventListener("click", findListings);
+  window.findListings = findListings;  // Used by the welcome screen (welcome.js).
 })();
