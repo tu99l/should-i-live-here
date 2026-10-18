@@ -99,11 +99,17 @@ _PLAIN = {("laundry", "shared"): "the shared laundry", ("laundry", "none"): "no 
           ("parking", "paid"): "paying for parking", ("parking", "none"): "no parking"}
 
 
+def _a(minutes: float) -> str:
+    """ "a 16-minute" but "an 8-minute" / "an 11-minute" / "an 18-minute"."""
+    n = round(minutes)
+    return "an" if str(n).startswith("8") or n in (11, 18) else "a"
+
+
 def _reason_text(reason: dict) -> str:
     """One reason in everyday words, e.g. "a 16-minute walk to Chipotle Mexican Grill"."""
     c, raw = reason["criterion"], reason["raw_value"]
     if reason.get("kind") == "near":
-        return f"a {raw:.0f}-minute walk to {reason.get('place_name') or 'the nearest ' + c.split(': ', 1)[1]}"
+        return f"{_a(raw)} {raw:.0f}-minute walk to {reason.get('place_name') or 'the nearest ' + c.split(': ', 1)[1]}"
     if reason.get("kind") == "feature":
         return f"no {c.split(': ', 1)[1]} (listing says \"{reason.get('evidence')}\")"
     if reason.get("kind") == "bathroom":
@@ -111,7 +117,7 @@ def _reason_text(reason: dict) -> str:
     if c == "rent":
         return f"rent at {_money(raw)} each"
     if c == "commute":
-        return f"a {raw:.0f}-minute commute"
+        return f"{_a(raw)} {raw:.0f}-minute commute"
     if c == "bedrooms":
         return f"only {raw} bedrooms"
     return _PLAIN.get((c, raw), f"{c} ({raw})")
