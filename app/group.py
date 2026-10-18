@@ -32,29 +32,38 @@ def _reasons(result: dict) -> list[dict]:
         if b["criterion"] == "commute":  # Say where to and how, e.g. 31 min by BICYCLE to Santa Monica Pier.
             reason["commute_to"] = result.get("commute_to")
             reason["travel_mode"] = result.get("travel_mode")
+        for key in ("kind", "place_name", "evidence"):  # Their own wishes: which gym, which quote.
+            if b.get(key) is not None:
+                reason[key] = b[key]
         reasons.append(reason)
     return reasons
 
 
 def decide(listings: list[Listing], roommates: list[Roommate],
-           commutes: Optional[dict[tuple[int, int], Optional[float]]] = None) -> dict:
+           commutes: Optional[dict[tuple[int, int], Optional[float]]] = None,
+           want_facts: Optional[dict[tuple[int, int], list]] = None) -> dict:
     """`commutes` maps (listing index, roommate index) to that roommate's commute minutes
-    (from maps_lookup.commutes_for). Without it, everyone's commute is the walk to campus."""
+    (from maps_lookup.commutes_for). Without it, everyone's commute is the walk to campus.
+    `want_facts` maps the same pairs to the facts for that roommate's own wishes
+    (from wishes.want_facts_for). Without it, every wish counts as unknown."""
     group_size = len(roommates)
     results = []
     for li, listing in enumerate(listings):
         per_roommate = []
         for ri, r in enumerate(roommates):
+            facts = (want_facts or {}).get((li, ri))
             if commutes is None:
-                p = score_listing(listing, r, group_size)
+                p = score_listing(listing, r, group_size, want_facts=facts)
             else:
-                p = score_listing(listing, r, group_size, commutes.get((li, ri)))
+                p = score_listing(listing, r, group_size, commutes.get((li, ri)), want_facts=facts)
             p["commute_to"] = r.place or None  # None = the default campus.
             p["travel_mode"] = r.travel_mode
             per_roommate.append(p)
         scores = [p["score"] for p in per_roommate]
         known = [s for s in scores if s is not None]
-        unknown = per_roommate[0]["unknown"]  # Which facts are missing is the same for everyone.
+        # Every fact missing for anyone (roommates' own wishes differ), in first-seen order.
+        unknown = list(dict.fromkeys(c for p in per_roommate for c in p["unknown"]))
+        all_criteria = {b["criterion"] for p in per_roommate for b in p["breakdown"]}
         results.append({
             "listing_id": listing.id,
             "title": listing.title or listing.address or listing.id,
@@ -65,7 +74,7 @@ def decide(listings: list[Listing], roommates: list[Roommate],
             "gap": round(max(known) - min(known), 1) if known else 0.0,
             "partial_data": bool(unknown),
             "unknown": unknown,
-            "known_share": round(1 - len(unknown) / len(CRITERIA), 2),
+            "known_share": round(1 - len(unknown) / max(len(all_criteria), len(CRITERIA)), 2),
             "red_flags": listing.red_flags,
             "per_roommate": per_roommate,
         })

@@ -104,3 +104,50 @@ def test_per_bed_price_is_what_each_person_pays():
     assert rent_per_person(per_bed, 3) == 1150  # Not divided: each person pays the listed price.
     both = make_listing(rent_total_monthly=3000, rent_per_person_listed=1150)
     assert rent_per_person(both, 2) == 1500  # A whole-unit price wins when both are stated.
+
+
+# ---------- A roommate's own wishes ("near a gym", "gas included") ----------
+
+from app.models import Want  # noqa: E402
+from app.scoring import NEAR_BEST_MINUTES, NEAR_WORST_MINUTES  # noqa: E402
+
+
+def wisher(*wants) -> Roommate:
+    return Roommate(name="A", budget=2000, weights=only(), wants=list(wants))
+
+
+def test_near_wish_scores_real_walk_minutes():
+    r = wisher(Want(kind="near", what="gym", weight=5))
+    for minutes, expected in [(NEAR_BEST_MINUTES, 100), (15, 50), (NEAR_WORST_MINUTES, 0)]:
+        out = score_listing(make_listing(), r, 2, want_facts=[{"name": "BFit", "walk_minutes": minutes}])
+        assert out["score"] == expected
+    row = out["breakdown"][-1]
+    assert row["criterion"] == "near: gym" and row["place_name"] == "BFit" and row["kind"] == "near"
+
+
+def test_feature_wish_yes_no_and_unknown_is_excluded():
+    r = Roommate(name="A", budget=2000, weights=only(laundry=5),
+                 wants=[Want(kind="feature", what="gas included", weight=5)])
+    yes = score_listing(make_listing(laundry="shared"), r, 2, want_facts=[{"value": True, "quote": "gas incl."}])
+    no = score_listing(make_listing(laundry="shared"), r, 2, want_facts=[{"value": False, "quote": "tenant pays gas"}])
+    unknown = score_listing(make_listing(laundry="shared"), r, 2, want_facts=[{"value": None, "quote": None}])
+    assert yes["score"] == 70 and no["score"] == 20  # 50% laundry at 0.4 + 50% gas.
+    assert unknown["score"] == 40  # Gas excluded: laundry alone counts, never a guess.
+    assert unknown["unknown"] == ["has: gas included"] and unknown["partial_data"] is True
+    assert yes["breakdown"][-1]["evidence"] == "gas incl."
+
+
+def test_missing_wish_facts_count_as_unknown():
+    out = score_listing(make_listing(), wisher(Want(kind="near", what="gym")), 2)
+    assert out["unknown"] == ["near: gym"] and out["score"] is None
+
+
+def test_a_wish_can_change_the_ranking():
+    near_gym, far_gym = make_listing(id="near"), make_listing(id="far", rent_total_monthly=2800)
+    r = Roommate(name="A", budget=2000, weights=only(rent=1))
+    plain = [score_listing(l, r, 2)["score"] for l in (near_gym, far_gym)]
+    assert plain[1] >= plain[0]  # Cheaper wins on rent alone.
+    r.wants = [Want(kind="near", what="gym", weight=5)]
+    facts = {"near": [{"walk_minutes": 3}], "far": [{"walk_minutes": 30}]}
+    with_gym = [score_listing(l, r, 2, want_facts=facts[l.id])["score"] for l in (near_gym, far_gym)]
+    assert with_gym[0] > with_gym[1]

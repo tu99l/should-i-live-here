@@ -152,3 +152,26 @@ def test_unknown_commute_for_one_roommate_is_excluded_not_guessed():
     result = decide([listing], [beach], {(0, 0): None})
     row = result["ranking"][0]["per_roommate"][0]
     assert row["unknown"] == ["commute"] and row["score"] == 0  # Judged on laundry (none) only.
+
+
+def test_wishes_flow_into_the_pick_and_the_reasons():
+    from app.models import Want
+    gym_fan = Roommate(name="Gym", budget=1500, weights=Weights(**ALL_ZERO),
+                       wants=[Want(kind="near", what="gym", weight=5)])
+    a, b = make_listing(id="a"), make_listing(id="b")
+    facts = {(0, 0): [{"name": "Far Gym", "walk_minutes": 24}], (1, 0): [{"name": "BFit", "walk_minutes": 4}],
+             (0, 1): [], (1, 1): []}
+    result = decide([a, b], [gym_fan, SAVER], want_facts=facts)
+    assert result["pick"]["listing_id"] == "b"
+    row = next(r for r in result["ranking"] if r["listing_id"] == "a")
+    gym_row = row["per_roommate"][0]["breakdown"][-1]
+    assert gym_row["criterion"] == "near: gym" and gym_row["place_name"] == "Far Gym"
+
+
+def test_unknown_wish_for_one_roommate_marks_the_listing_partial():
+    from app.models import Want
+    r = person("A", rent=1)
+    r.wants = [Want(kind="feature", what="pets allowed")]
+    result = decide([make_listing()], [r, SAVER], want_facts={(0, 0): [{"value": None}], (0, 1): []})
+    row = result["ranking"][0]
+    assert row["unknown"] == ["has: pets allowed"] and row["partial_data"] is True

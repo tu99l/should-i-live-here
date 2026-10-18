@@ -11,7 +11,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | 4 | `maps_lookup.py`: walk/bike time + groceries, cached, billing cap set | Freddy | 6:00 PM | done |
 | 5 | Map UI from `reference/UCLA-Apartment-Map.html`, demo listings load | Teammate | 5:00 PM | done (Tu) |
 | 6 | `group.py`: maximin fair pick, who is least happy and why | Freddy | 8:00 PM | done |
-| 7 | Photon iMessage (gated: only after 2 to 5 work; cut at 7:00 PM if no reply) | Whoever is free | ~6:00 PM | todo |
+| 7 | Photon iMessage (gated: only after 2 to 5 work; cut at 7:00 PM if no reply) | Freddy | ~6:00 PM | done: real round-trip on Freddy's iPhone; free-text wishes (near X / listing has X) |
 | 8 | Design pass: palette, fonts, empty and loading states | Teammate | 10:00 PM | doing (Tu): UCLA blue/gold, Nunito + Inter, empty and loading states done; waiting on review |
 | 9 | Devpost draft, thumbnail (5:3), README | Teammate | 11:00 PM | todo |
 | 10 | Sleep in shifts; stability fixes only | Both | 1:00 to 6:00 AM | todo |
@@ -61,6 +61,22 @@ Each roommate can now say where they need to get to and how. The backend looks u
 - Listings can now have `rent_per_person_listed`: a price the listing states per bed or per room ("$1,150/bed"). Each person pays that amount; it is not split.
 - In `static/app.js`, `rentPerPerson()` still checks the old `price`/`price_type`, which no longer exist. Change it to: `rent_total_monthly / roommates` if set, else `rent_per_person_listed`, else unknown. (Or use `rent_per_person` from each `/api/decide` ranking row, which already does this.)
 - Card idea: "$1,150/person (listed per bed)" so users see why it isn't split.
+
+## For Tu: roommates' own wishes, by text or on the page (new, step 7)
+Roommates can now ask for anything in their own words, by iMessage or (optionally) on the page:
+"i want to be close to a gym, laundry included, need gas and water included".
+- `POST /api/wishes` with `{"text": "..."}` returns what we understood: `weights` (only the built-in
+  criteria they mentioned), `wants` (each `{kind: "near"|"feature", what, weight, quote}`), `budget`,
+  `place`/`travel_mode`, `cannot_check` (their words we can't verify, like "quiet street").
+- Send `wants` on each roommate in `/api/decide`; nothing else changes. Breakdown rows for wishes have
+  `criterion` like `"near: gym"` or `"has: gas included"`, plus `kind`, `place_name` (near) or `evidence`
+  (the listing's exact words, for features). Unknown wishes are excluded and flagged like other facts.
+- Demo listings now have `source_text` (their notes from the old map), so "pets allowed", "water included",
+  "A/C" get real yes/no answers with quotes. Gas is unknown everywhere: no listing mentions it.
+- Run the iMessage bot: `.venv/bin/python -m app.photon_bot`. Needs `PHOTON_API_KEY` and `PHOTON_PROJECT_ID`
+  in `.env`, and `data/roommates.local.json` (copy `data/roommates.example.json`, put in real phone numbers;
+  it is git-ignored). Each roommate must be added to the iMessage line in the Photon dashboard and text it first.
+  Line: +1 628-316-6196. Commands: "pick", "reset", "help".
 
 ## Known risks (decided to leave as is)
 - The page loads Leaflet (unpkg.com) and fonts (Google Fonts) from the internet. Ad blockers like uBlock Origin can block them and break the layout (seen on Freddy's browser; fixed by turning extensions off). Judges only use our laptops, so we left it. If someone else ever needs to run it: copy those files into `static/vendor/` and load them locally.

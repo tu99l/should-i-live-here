@@ -21,3 +21,6 @@ cache/
 
 # Personal Claude Code notes (who you are, private preferences)
 CLAUDE.local.md
+
+# Roommate phone numbers for the iMessage bot (real numbers stay local)
+data/*.local.json

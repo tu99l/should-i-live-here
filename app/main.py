@@ -10,8 +10,9 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-from . import extract, group, maps_lookup  # noqa: E402  (imports read .env, so load it first)
+from . import extract, group, maps_lookup, wishes  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
+from .wishes import Wishes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Should I Live Here?")
@@ -50,6 +51,7 @@ def parse_listing(req: ParseRequest) -> Listing:
     listing = Listing(
         id=uuid.uuid4().hex[:8],
         title=facts.address or "Pasted listing",
+        source_text=req.text,  # Kept so "does it have X?" wishes can quote it.
         **facts.model_dump(exclude={"rejected"}),
     )
     if listing.address:
@@ -66,7 +68,18 @@ def decide(req: DecideRequest) -> dict:
         raise HTTPException(status_code=400, detail="Need at least one listing and one roommate.")
     # Each roommate's commute to their own place, from Google (cached). Scoring itself makes no calls.
     commutes = maps_lookup.commutes_for(req.listings, req.roommates)
-    return group.decide(req.listings, req.roommates, commutes)
+    # Facts for each roommate's own wishes ("near a gym", "gas included"): Google and listing quotes, cached.
+    facts = wishes.want_facts_for(req.listings, req.roommates)
+    return group.decide(req.listings, req.roommates, commutes, facts)
+
+
+@app.post("/api/wishes")
+def read_wishes(req: ParseRequest) -> Wishes:
+    """A roommate's own words -> what they want (checked quotes). Same reader as the iMessage bot."""
+    try:
+        return wishes.parse_wishes(req.text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not read that: {e}")
 
 
 @app.post("/api/explain")

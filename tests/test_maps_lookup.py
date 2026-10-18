@@ -144,3 +144,46 @@ def test_commutes_for_reuses_saved_campus_times_and_groups_places(monkeypatch):
     assert c[(0, 2)] == 10 and c[(1, 2)] == 20   # From Google.
     assert c[(0, 3)] == 10
     assert len(fake.calls) == 1  # Both beach bikers share one call.
+
+
+# ---------- "Near X": nearest place of any kind ----------
+
+class FakeTextSearch:
+    def __init__(self, places):
+        self.places, self.calls = places, []
+
+    def __call__(self, url, headers, json, timeout):
+        self.calls.append((url, json))
+        if "searchText" in url:
+            body = {"places": self.places}
+        else:
+            body = {"routes": [{"duration": "420s", "distanceMeters": 500,
+                                "legs": [{"startLocation": {"latLng": {"latitude": HOME["lat"], "longitude": HOME["lng"]}}}]}]}
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+
+
+def test_nearest_place_prefers_the_main_category_and_walks_there(monkeypatch):
+    fake = use(monkeypatch, FakeTextSearch([
+        {"displayName": {"text": "Karate Dojo"}, "location": NEAR_STORE, "primaryType": "martial_arts_studio"},
+        {"displayName": {"text": "Real Gym"}, "location": FAR_STORE, "primaryType": "gym"},
+    ]))
+    out = maps_lookup.nearest_place(HOME["lat"], HOME["lng"], "gym")
+    assert out == {"name": "Real Gym", "walk_minutes": 7.0}
+    search = fake.calls[0][1]
+    assert search["includedType"] == "gym" and search["textQuery"] == "gym"
+
+
+def test_brand_names_are_plain_text_searches_and_cached(monkeypatch):
+    fake = use(monkeypatch, FakeTextSearch([{"displayName": {"text": "Trader Joe's"}, "location": NEAR_STORE}]))
+    first = maps_lookup.nearest_place(HOME["lat"], HOME["lng"], "Trader Joe's")
+    assert first["name"] == "Trader Joe's" and "includedType" not in fake.calls[0][1]
+    n = len(fake.calls)
+    assert maps_lookup.nearest_place(HOME["lat"], HOME["lng"], "Trader Joe's") == first
+    assert len(fake.calls) == n
+
+
+def test_nothing_found_or_no_network_is_unknown(monkeypatch):
+    use(monkeypatch, FakeTextSearch([]))
+    assert maps_lookup.nearest_place(HOME["lat"], HOME["lng"], "dog park") is None
+    use(monkeypatch, FakeGoogle(fail=True))
+    assert maps_lookup.nearest_place(HOME["lat"], HOME["lng"], "cafe") is None

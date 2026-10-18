@@ -1,0 +1,7 @@
+{
+  "roommates": [
+    {"name": "Alex", "phone": "+15555550101", "budget": 1500, "weights": {"rent": 5, "commute": 2, "laundry": 3, "parking": 1, "bedrooms": 2}},
+    {"name": "Sam", "phone": "+15555550102", "budget": 1900, "weights": {"rent": 2, "commute": 5, "laundry": 3, "parking": 4, "bedrooms": 3}},
+    {"name": "Jordan", "phone": null, "budget": 1700, "weights": {"rent": 3, "commute": 3, "laundry": 5, "parking": 2, "bedrooms": 3}}
+  ]
+}

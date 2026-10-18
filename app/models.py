@@ -40,6 +40,9 @@ class Listing(ListingFacts):
     grocery_count: Optional[int] = Field(None, description="Grocery stores within 1 km, straight line")
     nearest_grocery: Optional[str] = None
     red_flags: list[str] = Field(default_factory=list)
+    # The listing's own words (pasted text, or the notes saved for demo listings).
+    # "Does it have X?" questions are answered only from this text, with a quote.
+    source_text: Optional[str] = None
     evidence: dict[str, str] = Field(default_factory=dict, description="Exact quote from the listing for each extracted fact")
 
 
@@ -59,6 +62,20 @@ class Weights(BaseModel):
     bedrooms: float = Field(3, ge=0, le=5)
 
 
+class Want(BaseModel):
+    """Something specific a roommate asked for, in their own words (see wishes.py).
+
+    kind "near":    a kind of place close by ("gym", "Trader Joe's"). Real walk time from Google.
+    kind "feature": something the listing has ("gas included", "pets allowed"). Read from the
+                    listing text with an exact quote, else unknown.
+    """
+
+    kind: Literal["near", "feature"]
+    what: str = Field(..., min_length=1, max_length=100)
+    weight: float = Field(3, ge=0, le=5)
+    quote: Optional[str] = Field(None, description="The roommate's own words that asked for it")
+
+
 class Roommate(BaseModel):
     name: str
     budget: float = Field(..., gt=0, description="Most this person wants to pay per month")
@@ -66,6 +83,7 @@ class Roommate(BaseModel):
     # Where this roommate needs to get to (campus, work, the beach...). Blank = the default campus.
     place: Optional[str] = Field(None, max_length=200)
     travel_mode: TravelMode = "WALK"
+    wants: list[Want] = Field(default_factory=list, max_length=8)
 
 
 class ParseRequest(BaseModel):

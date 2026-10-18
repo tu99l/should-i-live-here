@@ -115,6 +115,59 @@ def groceries(lat: float, lng: float) -> dict:
     return out
 
 
+SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText"
+NEAR_SEARCH_METERS = 3000  # Look around the listing this far (a bias: Google may still return farther places).
+
+# Common words -> Google place type, so "gym" finds gyms and not martial-arts schools.
+# Anything else (a brand like "Trader Joe's", "dog park") is searched as plain text.
+PLACE_TYPES = {
+    "gym": "gym", "fitness center": "gym", "grocery store": "grocery_store", "grocery": "grocery_store",
+    "supermarket": "supermarket", "park": "park", "cafe": "cafe", "coffee shop": "coffee_shop",
+    "library": "library", "pharmacy": "pharmacy", "church": "church", "laundromat": "laundromat",
+    "bar": "bar", "restaurant": "restaurant", "hospital": "hospital", "bank": "bank",
+    "post office": "post_office", "train station": "train_station", "bus stop": "bus_stop",
+}
+
+
+def _place_type(what: str) -> Optional[str]:
+    w = " ".join(what.casefold().split()).removeprefix("a ").removeprefix("the ")
+    return PLACE_TYPES.get(w) or PLACE_TYPES.get(w.removesuffix("s"))
+
+
+def nearest_place(lat: float, lng: float, what: str) -> Optional[dict]:
+    """The nearest place matching any text ("gym", "Trader Joe's", "dog park") and the real walk there.
+
+    Returns {name, walk_minutes} or None if Google found nothing or can't be reached.
+    The search text is the roommate's own words; Google decides what matches, we never guess.
+    """
+    body = {
+        "textQuery": what,
+        "pageSize": 5,
+        "rankPreference": "DISTANCE",
+        "locationBias": {"circle": {"center": {"latitude": lat, "longitude": lng},
+                                    "radius": NEAR_SEARCH_METERS}},
+    }
+    place_type = _place_type(what)
+    if place_type:
+        body.update(includedType=place_type, strictTypeFiltering=True)
+    # Own cache folder ("near"), since this asks for primaryType too.
+    reply = _post("near", SEARCH_TEXT_URL, "places.displayName,places.location,places.primaryType", body)
+    places = (reply or {}).get("places") or []
+    if place_type:
+        # Prefer places whose MAIN category is the one asked for (a martial-arts school also tagged "gym" loses).
+        places = [p for p in places if p.get("primaryType") == place_type] or places
+    if not places:
+        return None
+    # Nearest in a straight line first, then the real walk to that one.
+    nearest = min(places, key=lambda p: _meters_between(lat, lng, p["location"]["latitude"],
+                                                        p["location"]["longitude"]))
+    walk = route({"lat": lat, "lng": lng},
+                 {"lat": nearest["location"]["latitude"], "lng": nearest["location"]["longitude"]}, "WALK")
+    if walk is None:
+        return None
+    return {"name": nearest.get("displayName", {}).get("text"), "walk_minutes": walk["minutes"]}
+
+
 def lookup(place: Place) -> dict:
     """Everything the map card needs from Google for one listing. Missing values stay None."""
     campus = {"address": destination()}
