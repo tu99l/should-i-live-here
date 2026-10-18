@@ -52,6 +52,13 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
 - [ ] Thumbnail (5:3).
 - Demo moments to use: see "Demo moments (current...)" below. Older demo notes further down are outdated.
 
+**Optional prize: MLH "Best Domain Name from GoDaddy Registry"** (from the brief; nothing done yet; whoever has time):
+- [ ] Ask MLH (their table or the event Discord) for the free GoDaddy Registry domain code and the rules.
+- [ ] Register a creative name (ideas, availability not checked: shouldilivehere, fairestpick, roomiefair, fairsplit).
+- [ ] Our app runs on a laptop, so forward the domain to the GitHub page (https://github.com/tu99l/should-i-live-here)
+      or the demo video, using the registrar's forwarding setting (no code).
+- [ ] On Devpost, opt into the challenge and list the domain; add it to the README's Team section.
+
 ## Code that must change to match the brief
 The starter code was written before the brief, so it uses different names. Fix these as part of steps 2 to 6:
 - Done: `app/parser.py` is now `app/extract.py` with the brief's schema. `/api/parse` still returns the old Listing shape (via `to_listing_fields`) plus a new `evidence` field, until step 3.
