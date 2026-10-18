@@ -2,7 +2,11 @@
 // and shows the fair pick that the backend's own scoring code computes.
 // Nothing here scores a listing; the per-person rent is only for the marker colors and cards.
 
-const CAMPUS = { name: "UCLA", latlng: [34.0699182, -118.4438495] };
+// Where the group heads most days (a campus, an office, a neighborhood). Anyone can type their own.
+// The demo starts at UCLA because DEFAULT_DESTINATION in app/maps_lookup.py is Royce Hall, so the demo
+// listings' saved walk and bike times apply. Any other place is sent as each roommate's place.
+const DEFAULT_HOME = { name: "UCLA", latlng: [34.0699182, -118.4438495] };
+let home = { ...DEFAULT_HOME };
 const WALK_CIRCLE_MINUTES = 35;
 const WALK_METERS_PER_MINUTE = 80; // ~3 mph, so 35 min is about 2.8 km (1.75 mi), as in the earlier map
 // Must match CRITERIA in app/scoring.py.
@@ -13,12 +17,9 @@ const RATING_WORDS = ["don't care", "a little", "somewhat", "matters", "a lot", 
 // Must match TravelMode in app/models.py. The words are used in sentences like "31 min by bike".
 const TRAVEL_MODES = { WALK: "walking", BICYCLE: "by bike", TRANSIT: "by transit", DRIVE: "driving" };
 
-// Per-person rent tiers for marker colors (upper bound in dollars, inclusive). Colors match styles.css.
-const TIERS = [
-  { max: 1300, color: "#2e9e5b", label: "≤ $1,300" },
-  { max: 1550, color: "#e8a23b", label: "$1,301–$1,550" },
-  { max: Infinity, color: "#d0573f", label: "$1,551+" },
-];
+// Marker colors for rent per person, measured against the group's own budgets (so it works in any city).
+// Colors match the --tier-* tokens in styles.css.
+const TIER_COLORS = { fits: "#2e9e5b", some: "#e8a23b", none: "#d0573f" };
 const UNKNOWN_COLOR = "#8a94a6";
 const PICK_RING = "#1e3a5f", PICK_GLOW = "#ffc72c", MARKER_EDGE = "#ffffff", WALK_CIRCLE = "#2774ae";
 
@@ -38,39 +39,46 @@ let roommates = [
   { name: "Sam", budget: 1900, place: "", travel_mode: "WALK", weights: { rent: 2, commute: 5, laundry: 3, parking: 4, bedrooms: 3 } },
   { name: "Jordan", budget: 1700, place: "", travel_mode: "WALK", weights: { rent: 3, commute: 3, laundry: 5, parking: 2, bedrooms: 3 } },
 ];
+let demoIds = new Set(); // The pre-loaded UCLA listings, so "Start fresh" can remove them.
 let markers = {};
+let homeLayers = [];
 let pickHalo = null;
 let lastDecision = null;
 
 // ---------- Map ----------
-const map = L.map("map", { scrollWheelZoom: true }).setView(CAMPUS.latlng, 14);
+const map = L.map("map", { scrollWheelZoom: true }).setView(home.latlng, 14);
 // Standard OpenStreetMap tiles. The CARTO tiles from the earlier map now need an API key.
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors", maxZoom: 19,
 }).addTo(map);
 
-L.circle(CAMPUS.latlng, {
-  radius: WALK_CIRCLE_MINUTES * WALK_METERS_PER_MINUTE,
-  color: WALK_CIRCLE, weight: 1.5, dashArray: "6 6", fill: true, fillColor: WALK_CIRCLE, fillOpacity: 0.05,
-  interactive: false,
-}).addTo(map);
-
-L.marker(CAMPUS.latlng, {
-  icon: L.divIcon({ className: "", html: `<div class="campus-badge">${CAMPUS.name}</div>`, iconSize: [50, 22], iconAnchor: [25, 11] }),
-  keyboard: false,
-}).addTo(map).bindTooltip(`${CAMPUS.name} campus center`, { direction: "top" });
+// The group's destination: a badge and a dashed walk circle. Skipped when we don't know where it is.
+function drawHome() {
+  homeLayers.forEach(l => l.remove());
+  homeLayers = [];
+  if (!home.latlng) return;
+  homeLayers.push(L.circle(home.latlng, {
+    radius: WALK_CIRCLE_MINUTES * WALK_METERS_PER_MINUTE,
+    color: WALK_CIRCLE, weight: 1.5, dashArray: "6 6", fill: true, fillColor: WALK_CIRCLE, fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map));
+  homeLayers.push(L.marker(home.latlng, {
+    icon: L.divIcon({ className: "", html: `<div class="campus-badge">${esc(home.name)}</div>`, iconSize: [0, 0] }),
+    keyboard: false,
+  }).addTo(map).bindTooltip(`Where the group needs to get to: ${esc(home.name)}`, { direction: "top" }));
+}
 
 const legend = L.control({ position: "bottomright" });
-legend.onAdd = () => {
-  const d = L.DomUtil.create("div", "legend");
-  d.innerHTML = "<b>Rent per person</b>" +
-    TIERS.map(t => `<span class="dot" style="background:${t.color}"></span>${t.label}<br>`).join("") +
-    `<span class="dot" style="background:${UNKNOWN_COLOR}"></span>Unknown<br>` +
-    `<span class="dot pick"></span>Fairest pick<br>` +
-    `<span class="walk-key"></span>~${WALK_CIRCLE_MINUTES}-min walk`;
-  return d;
-};
+legend.onAdd = () => L.DomUtil.create("div", "legend");
 legend.addTo(map);
+
+function renderLegend() {
+  legend.getContainer().innerHTML = "<b>Rent per person</b>" +
+    tiers().map(t => `<span class="dot" style="background:${t.color}"></span>${t.label}<br>`).join("") +
+    `<span class="dot" style="background:${UNKNOWN_COLOR}"></span>Unknown<br>` +
+    `<span class="dot pick"></span>Fairest pick` +
+    (home.latlng ? `<br><span class="walk-key"></span>~${WALK_CIRCLE_MINUTES}-min walk` : "");
+}
 
 // ---------- Helpers ----------
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -87,9 +95,26 @@ function rentPerPerson(l) {
   return null;
 }
 
+// Green: within everyone's budget. Amber: over someone's. Red: over everyone's.
+function tiers() {
+  const budgets = roommates.map(r => r.budget).filter(b => b > 0);
+  if (!budgets.length) return [{ max: Infinity, color: TIER_COLORS.fits, label: "Known" }];
+  const lo = Math.min(...budgets), hi = Math.max(...budgets);
+  const t = [{ max: lo, color: TIER_COLORS.fits, label: `Up to ${money(lo)}: fits every budget` }];
+  if (hi > lo) t.push({ max: hi, color: TIER_COLORS.some, label: `Up to ${money(hi)}: over someone's budget` });
+  t.push({ max: Infinity, color: TIER_COLORS.none, label: `Over ${money(hi)}: over every budget` });
+  return t;
+}
+
 function tierColor(l) {
   const rpp = rentPerPerson(l);
-  return rpp == null ? UNKNOWN_COLOR : TIERS.find(t => rpp <= t.max).color;
+  return rpp == null ? UNKNOWN_COLOR : tiers().find(t => rpp <= t.max).color;
+}
+
+// The place sent for a roommate: their own, else the group's (null = the backend's default, UCLA).
+function placeFor(r) {
+  if (r.place) return r.place;
+  return home.name.trim().toLowerCase() === DEFAULT_HOME.name.toLowerCase() ? null : home.name;
 }
 
 function minutes(v, what) {
@@ -107,9 +132,9 @@ function reasonText(r) {
   return `${esc(name)}${fact != null ? ` (${esc(fact)})` : ""}, −${r.points_lost} pts`;
 }
 
-// "31 min by bike to Santa Monica Pier". A blank place means the default campus.
+// "31 min by bike to Santa Monica Pier". A blank place means the backend's default (UCLA).
 function commuteText(mins, place, mode) {
-  return `${Math.round(mins)} min ${TRAVEL_MODES[mode] || TRAVEL_MODES.WALK} to ${place || CAMPUS.name}`;
+  return `${Math.round(mins)} min ${TRAVEL_MODES[mode] || TRAVEL_MODES.WALK} to ${place || DEFAULT_HOME.name}`;
 }
 
 // ---------- Cards ----------
@@ -136,7 +161,7 @@ function cardHtml(l, inPopup) {
     <div class="tip-price">${rpp == null ? `Rent per person: ${unknown}` : `<b>${money(rpp)}</b>/person`}
       ${total != null ? ` &middot; ${money(total)}/mo whole unit` : rpp != null ? " (listed per bed or room)" : ""}</div>
     <div class="tip-row"><span class="lab">🏠</span>${rooms || unknown}</div>
-    <div class="tip-row"><span class="lab">🚶</span>${commute ? esc(commute) + " to campus" : unknown}</div>
+    <div class="tip-row"><span class="lab">🚶</span>${commute ? `${esc(commute)} to ${esc(l.commute_to || DEFAULT_HOME.name)}` : unknown}</div>
     <div class="tip-row"><span class="lab">🧺</span>Laundry: ${label(l.laundry)}</div>
     <div class="tip-row"><span class="lab">🅿️</span>Parking: ${label(l.parking)}</div>
     <div class="tip-row"><span class="lab">🛒</span>${groceryText(l)}</div>
@@ -171,7 +196,7 @@ function drawListings() {
   Object.values(markers).forEach(m => m.remove());
   markers = {};
   if (pickHalo) { pickHalo.remove(); pickHalo = null; }
-  const bounds = [CAMPUS.latlng];
+  const bounds = home.latlng ? [home.latlng] : [];
   for (const l of listings) {
     if (l.lat == null || l.lng == null) continue;
     const isPick = lastDecision?.pick.listing_id === l.id;
@@ -208,11 +233,11 @@ function renderRoommates() {
     <div class="roommate">
       <div class="roommate-head">
         <input type="text" value="${esc(r.name)}" aria-label="Roommate name" onchange="roommates[${i}].name=this.value">
-        <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="50" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value"></span>
+        <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="50" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value; budgetsChanged()"></span>
         ${roommates.length > 1 ? `<button class="remove" title="Remove ${esc(r.name)}" aria-label="Remove ${esc(r.name)}" onclick="removeRoommate(${i})">×</button>` : ""}
       </div>
       <div class="roommate-commute">
-        <input type="text" value="${esc(r.place || "")}" placeholder="Going to: ${CAMPUS.name} (or type a place)"
+        <input type="text" value="${esc(r.place || "")}" placeholder="Going to: ${esc(home.name || "our place")} (or type another)"
                aria-label="Where ${esc(r.name)} needs to get to" title="Type a specific place, e.g. Santa Monica Pier, Santa Monica, CA"
                onchange="roommates[${i}].place=this.value.trim()">
         <select aria-label="How ${esc(r.name)} gets there" onchange="roommates[${i}].travel_mode=this.value">
@@ -239,6 +264,48 @@ function setWeight(i, f, v, btn) {
   }
 }
 
+// Budgets set the marker colors.
+function budgetsChanged() {
+  renderLegend();
+  drawListings();
+}
+
+// The group's destination changed: find it on the map (if the backend can) and clear the old pick.
+async function setHome(text) {
+  const name = text.trim() || DEFAULT_HOME.name;
+  home = name.toLowerCase() === DEFAULT_HOME.name.toLowerCase() ? { ...DEFAULT_HOME } : { name, latlng: null };
+  if (!home.latlng) {
+    try {
+      // Needs a geocode route on the backend (see TASKS.md, "For Freddy: make it work anywhere"). Until then the
+      // pick still uses this place for everyone's commute; the map just has no badge for it.
+      const r = await fetch("/api/place?q=" + encodeURIComponent(name));
+      const p = r.ok ? await r.json() : null;
+      if (p?.lat != null && p?.lng != null && home.name === name) home.latlng = [p.lat, p.lng];
+    } catch { /* No geocoder: keep going without the badge. */ }
+  }
+  lastDecision = null;
+  showEmptyResult();
+  renderRoommates();
+  renderLegend();
+  drawHome();
+  const bounds = drawListings();
+  if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+}
+
+// For people who aren't near UCLA: drop the demo listings and paste their own.
+function clearDemo() {
+  listings = listings.filter(l => !demoIds.has(l.id));
+  demoIds.clear();
+  document.getElementById("startFresh").hidden = true;
+  lastDecision = null;
+  showEmptyResult();
+  drawListings();
+  const s = document.getElementById("parseStatus");
+  s.className = "status";
+  s.textContent = "Demo listings removed. Paste a listing from anywhere to add it.";
+  document.getElementById("paste").focus();
+}
+
 function showEmptyResult() {
   document.getElementById("result").innerHTML =
     '<div class="empty">No pick yet. Set everyone\'s priorities, then press the button.</div>';
@@ -249,6 +316,7 @@ function roommatesChanged() {
   lastDecision = null;
   showEmptyResult();
   renderRoommates();
+  renderLegend();
   drawListings();
 }
 
@@ -267,13 +335,17 @@ function removeRoommate(i) {
 async function runDecision() {
   const out = document.getElementById("result");
   const btn = document.getElementById("decideBtn");
+  if (!listings.length) {
+    out.innerHTML = '<div class="status error">No listings yet. Paste one in step 3 first.</div>';
+    return;
+  }
   btn.disabled = true;
   out.innerHTML = '<div class="status"><span class="spinner"></span>Scoring every place for every roommate…</div>';
   try {
     const res = await fetch("/api/decide", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      // A blank place is sent as null, which means the default campus.
-      body: JSON.stringify({ listings, roommates: roommates.map(r => ({ ...r, place: r.place || null })) }),
+      // A blank place uses the group's; null means the backend's default (UCLA).
+      body: JSON.stringify({ listings, roommates: roommates.map(r => ({ ...r, place: placeFor(r) })) }),
     });
     const d = await res.json();
     if (!res.ok) { out.innerHTML = `<div class="status error">Couldn't decide: ${esc(d.detail)}</div>`; return; }
@@ -377,10 +449,13 @@ else document.getElementById("welcomeStart").focus();
 
 // ---------- Start ----------
 renderRoommates();
+renderLegend();
+drawHome();
 fetch("/api/demo")
   .then(r => r.json())
   .then(data => {
     listings = data;
+    demoIds = new Set(data.map(l => l.id));
     map.fitBounds(drawListings(), { padding: [40, 40] });
   })
   .catch(() => {

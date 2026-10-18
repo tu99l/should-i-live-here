@@ -15,7 +15,7 @@
   <!-- Welcome screen: covers the app until "Start". Add #app to the URL to skip it. -->
   <div id="welcome" class="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
     <div class="welcome-inner">
-      <span class="welcome-kicker">For UCLA roommates</span>
+      <span class="welcome-kicker">For roommates anywhere</span>
       <h1 id="welcomeTitle" class="welcome-title">Should I Live <span>Here?</span></h1>
       <p class="welcome-pitch">Finding a place with roommates means someone always gives something up.
         We find the apartment that's fairest for everyone, using real facts, and show the math.</p>
@@ -25,24 +25,25 @@
         <li><span class="step">3</span><div><b>You get the fairest pick</b>The place where the least happy roommate is happiest, and who gives up what.</div></li>
       </ol>
       <button class="primary welcome-start" id="welcomeStart" onclick="enterApp()">Find our place →</button>
-      <p class="welcome-foot">12 real listings near UCLA are loaded and ready. Built at LA Hacks 2026.</p>
+      <p class="welcome-foot">The demo starts with 12 real listings near UCLA. Live somewhere else? Type your city's spot and paste your own listings. Built at LA Hacks 2026.</p>
     </div>
     <svg class="skyline" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <!-- Westwood: Royce Hall's twin towers in the middle, palm trees and low buildings around it -->
+      <!-- Any neighborhood: apartment blocks with lit windows, a house and trees -->
       <g class="sky-back">
-        <path d="M0 220v-60h80v-25h60v85zM150 220v-45h90v45zM960 220v-50h70v-20h60v70zM1100 220v-75h100v75z"/>
+        <path d="M0 220v-70h90v-30h70v100zM170 220v-55h80v55zM940 220v-60h80v-25h70v85zM1100 220v-90h100v90z"/>
       </g>
       <g class="sky-front">
-        <!-- Royce Hall: main hall, entrance arches, two towers with pointed roofs -->
-        <path d="M470 220v-70h260v70z"/>
-        <path d="M520 220V95h40v125zM640 220V95h40v125z"/>
-        <path d="M512 97l28-40l28 40zM632 97l28-40l28 40z"/>
-        <path class="gold" d="M577 220v-30a23 23 0 0 1 46 0v30z"/>
-        <rect class="gold" x="534" y="120" width="12" height="20" rx="6"/><rect class="gold" x="654" y="120" width="12" height="20" rx="6"/>
-        <!-- Palm trees -->
-        <path d="M330 220l6-120h5l6 120zM338 100c-30-6-48 6-58 18c18-10 36-12 58-12zM338 100c28-8 48 2 60 14c-20-8-38-8-60-8zM338 100c-8-22-26-32-40-34c14 10 26 20 34 36zM338 100c10-20 28-28 44-28c-16 8-28 18-38 32z"/>
-        <path d="M860 220l6-140h5l6 140zM868 80c-30-6-48 6-58 18c18-10 36-12 58-12zM868 80c28-8 48 2 60 14c-20-8-38-8-60-8zM868 80c-8-22-26-32-40-34c14 10 26 20 34 36zM868 80c10-20 28-28 44-28c-16 8-28 18-38 32z"/>
-        <path d="M250 220v-55h60v55zM760 220v-40h70v40zM900 220v-30h50v30z"/>
+        <path d="M300 220V90h110v130zM430 220V130h90v90zM540 220V60h120v160zM680 220v-70l55-45l55 45v70zM810 220V110h100v110z"/>
+        <path d="M247 220v-42h6v42zM250 188m-22 0a22 26 0 1 0 44 0a22 26 0 1 0 -44 0zM957 220v-52h6v52zM960 168m-26 0a26 30 0 1 0 52 0a26 30 0 1 0 -52 0z"/>
+        <g class="gold">
+          <rect x="318" y="108" width="16" height="16" rx="2"/><rect x="376" y="108" width="16" height="16" rx="2"/>
+          <rect x="347" y="148" width="16" height="16" rx="2"/><rect x="318" y="188" width="16" height="16" rx="2"/>
+          <rect x="448" y="150" width="14" height="14" rx="2"/><rect x="488" y="180" width="14" height="14" rx="2"/>
+          <rect x="560" y="80" width="18" height="18" rx="2"/><rect x="622" y="80" width="18" height="18" rx="2"/>
+          <rect x="591" y="120" width="18" height="18" rx="2"/><rect x="560" y="160" width="18" height="18" rx="2"/>
+          <rect x="622" y="160" width="18" height="18" rx="2"/><path d="M722 220v-34h26v34z"/>
+          <rect x="830" y="130" width="16" height="16" rx="2"/><rect x="874" y="170" width="16" height="16" rx="2"/>
+        </g>
       </g>
     </svg>
   </div>
@@ -56,6 +57,10 @@
 
     <section>
       <h2><span class="step">1</span>Who's moving in?</h2>
+      <label class="home-base">Where does your group need to get to most days?
+        <input id="homeBase" type="text" value="UCLA" maxlength="120" autocomplete="off"
+               placeholder="A campus, an office or a neighborhood" onchange="setHome(this.value)">
+      </label>
       <p class="hint">Set each person's max rent, where they need to get to and how, and how much each thing matters (0 = don't care, 5 = deal-breaker).</p>
       <div id="roommates"></div>
       <button class="secondary" onclick="addRoommate()">+ Add roommate</button>
@@ -67,7 +72,7 @@
       <form id="inviteForm" class="invite-form" autocomplete="off">
         <label>Name<input id="inviteName" required maxlength="60" placeholder="Sam"></label>
         <label>Phone<input id="invitePhone" type="tel" required maxlength="30" placeholder="(424) 555-0123"></label>
-        <label>Email <span class="tip-sub">optional, sends an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@ucla.edu"></label>
+        <label>Email <span class="tip-sub">optional, sends an invite</span><input id="inviteEmail" type="email" maxlength="254" placeholder="sam@example.com"></label>
         <label>Max rent <span class="tip-sub">optional</span><input id="inviteBudget" type="number" min="1" step="50" placeholder="1500"></label>
         <button class="secondary" id="inviteBtn" type="submit">Add to the group text</button>
       </form>
@@ -85,7 +90,8 @@
 
     <section>
       <h2><span class="step">3</span>Add a listing</h2>
-      <p class="hint">Paste the text of any listing. We pull out the facts and look up real walk times and groceries.</p>
+      <p class="hint">Paste the text of any listing, from any city. We pull out the facts and look up real walk times and groceries.
+        <a href="#" id="startFresh" class="link" onclick="clearDemo(); return false;">Not near UCLA? Remove the 12 demo listings.</a></p>
       <textarea id="paste" placeholder="Paste listing text here, e.g. from Zillow or Craigslist"></textarea>
       <button class="secondary" id="parseBtn" onclick="parseListing()">Read listing</button>
       <div id="parseStatus" class="status"></div>

@@ -109,3 +109,30 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] `data/samples/`: 3 real Zillow listings saved (phones removed). Still useful: one messy Craigslist/Facebook post or per-bed price.
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
+
+## For Freddy: make it work anywhere, not just UCLA (from Tu; backend, please review)
+The page no longer assumes UCLA. Done in `static/` (works today, no backend change needed):
+- New box "Where does your group need to get to most days?" (default "UCLA"). If it's not "UCLA", the page sends
+  it as `place` for every roommate whose own "Going to" box is blank, so `/api/decide` already scores commutes
+  to it with real Google times. Tested: "Santa Monica Pier, Santa Monica, CA" flips the pick to 1824 Fairburn.
+- Marker colors now come from the group's own budgets (fits everyone / over someone's / over everyone's)
+  instead of fixed LA prices. "Start fresh" link removes the 12 UCLA demo listings. Welcome page and copy say
+  "for roommates anywhere". Demo data stays UCLA.
+
+Backend asks, in priority order (none block the demo; the page already handles them being missing):
+1. **Geocode route for the group's place**, so the map can show its badge and walk circle:
+   `GET /api/place?q=<text>` -> `{"name", "formatted_address", "lat", "lng"}` (cached; 404 if not found).
+   `static/app.js` `setHome()` already calls it and skips the badge if it 404s.
+2. **Per-request destination in `/api/parse`.** `maps_lookup.lookup()` always uses `destination()` (Royce Hall),
+   so a pasted listing in another city gets walk/bike times to UCLA (or none). Proposal: accept an optional
+   `destination` in `ParseRequest`, pass it to `lookup()`, and return it on the listing as `commute_to`.
+   The card already labels times with `l.commute_to || "UCLA"`, so it will show the right place once it's there.
+   (Until then, the pick is still right: `/api/decide` uses each roommate's place; only the card's walk/bike
+   line is to UCLA.)
+3. **`commutes_for()` fallback:** when `place` is blank it reuses `walk_minutes`/`bike_minutes`. With item 2,
+   those are to whatever destination the listing was parsed with; worth storing that on the listing and only
+   reusing the saved minutes when it matches the roommate's destination.
+4. **Wording in prompts:** `app/wishes.py` lines ~102-112 say "close to campus / UCLA / class". Suggest
+   "close to campus, school or work" so texts from non-UCLA people read right.
+5. **Money:** `extract.py` asks for "US dollars" and the page shows `$`. Fine for the US; other currencies would
+   need a `currency` field. Probably out of scope for this weekend; flag it in the Devpost as a next step.
