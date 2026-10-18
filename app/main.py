@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from . import extract, group, maps_lookup, photon_bot, rentcast, wishes  # noqa: E402  (imports read .env, so load it first)
-from .models import DecideRequest, Listing, ParseRequest  # noqa: E402
+from . import extract, group, group_store, maps_lookup, photon_bot, rentcast, wishes  # noqa: E402  (imports read .env, so load it first)
+from .models import DecideRequest, Listing, ParseRequest, TravelMode  # noqa: E402
 from .wishes import Wishes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -77,7 +77,7 @@ def decide(req: DecideRequest) -> dict:
     commutes = maps_lookup.commutes_for(req.listings, req.roommates)
     # Facts for each roommate's own wishes ("near a gym", "gas included"): Google and listing quotes, cached.
     facts = wishes.want_facts_for(req.listings, req.roommates)
-    return group.decide(req.listings, req.roommates, commutes, facts)
+    return group.decide(req.listings, req.roommates, commutes, facts, req.group_size)
 
 
 @app.post("/api/wishes")
@@ -183,3 +183,186 @@ def search_listings(req: SearchRequest) -> dict:
         listing.commute_to = None if is_campus else dest  # None = the default campus.
     result["place"] = center
     return result
+
+
+# ---------- The group: one list of people, shared with the iMessage bot (group_store.py) ----------
+
+def _group_view() -> dict:
+    return group_store.public_view(group_store.read(), photon_bot.text_link)
+
+
+def _read_wishes(text: str) -> Optional[wishes.Wishes]:
+    """Their words -> checked wishes, before taking the group's lock (Gemini can take a few seconds)."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        return wishes.parse_wishes(text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't read that just now: {e}")
+
+
+def _apply(person: group_store.Person, w: Optional[wishes.Wishes], text: Optional[str]) -> None:
+    if w is not None and not w.is_empty():
+        person.roommate = wishes.apply_wishes(person.roommate, w)
+        person.last_text = text
+
+
+def _person_or_404(g: group_store.Group, name: str) -> group_store.Person:
+    person = g.find(name)
+    if person is None:
+        raise HTTPException(status_code=404, detail=f"No one called {name!r} in the group.")
+    return person
+
+
+@app.get("/api/group")
+def get_group() -> dict:
+    """Everyone in the group, their wishes and texting status (last 4 phone digits only). `version` changes on every edit."""
+    return _group_view()
+
+
+class MeRequest(BaseModel):
+    name: str = Field("You", min_length=1, max_length=40)
+    text: Optional[str] = Field(None, max_length=600)
+    place: Optional[str] = Field(None, max_length=120)
+    size: Optional[int] = Field(None, ge=1, le=10)
+
+
+@app.post("/api/group/me")
+def set_me(req: MeRequest) -> dict:
+    """The welcome screen: who you are, what you want (your words), where the group goes, how many of you."""
+    w = _read_wishes(req.text)
+    name = " ".join(req.name.split())
+    with group_store.editing() as g:
+        me = next((p for p in g.people if p.me), None)
+        if me is None:
+            me = group_store.Person(name=name, me=True, roommate=group_store.starting_roommate(name))
+            g.people.insert(0, me)
+        me.name = me.roommate.name = name
+        _apply(me, w, req.text)
+        if req.place and req.place.strip():
+            g.place = req.place.strip()
+        if req.size:
+            g.size = req.size
+    return {"group": _group_view(), "understood": w.model_dump() if w else None}
+
+
+class PersonRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=40)
+    text: Optional[str] = Field(None, max_length=600)
+    budget: Optional[float] = Field(None, gt=0)
+
+
+@app.post("/api/group/people")
+def add_person(req: PersonRequest) -> dict:
+    """Add someone without a phone (you type what they want). To invite by text, use /api/roommates/invite."""
+    w = _read_wishes(req.text)
+    name = " ".join(req.name.split())
+    with group_store.editing() as g:
+        if g.find(name):
+            raise HTTPException(status_code=409, detail=f"{name} is already in the group.")
+        person = group_store.Person(name=name, roommate=group_store.starting_roommate(name, req.budget or 1500))
+        _apply(person, w, req.text)
+        g.people.append(person)
+        g.size = max(g.size, len(g.people))
+    return {"group": _group_view(), "understood": w.model_dump() if w else None}
+
+
+class WishText(BaseModel):
+    text: str = Field(..., min_length=1, max_length=600)
+
+
+@app.post("/api/group/people/{name}/wishes")
+def add_wishes(name: str, req: WishText) -> dict:
+    """Someone's words -> their wishes, added to what they already said (same reader as the bot)."""
+    w = _read_wishes(req.text)
+    with group_store.editing() as g:
+        _apply(_person_or_404(g, name), w, req.text)
+    return {"group": _group_view(), "understood": w.model_dump() if w else None}
+
+
+class PersonEdit(BaseModel):
+    budget: Optional[float] = Field(None, gt=0)
+    place: Optional[str] = Field(None, max_length=200)  # "" = the group's place.
+    travel_mode: Optional[TravelMode] = None
+
+
+@app.patch("/api/group/people/{name}")
+def edit_person(name: str, req: PersonEdit) -> dict:
+    with group_store.editing() as g:
+        r = _person_or_404(g, name).roommate
+        if req.budget is not None:
+            r.budget = req.budget
+        if req.place is not None:
+            r.place = req.place.strip() or None
+        if req.travel_mode is not None:
+            r.travel_mode = req.travel_mode
+    return _group_view()
+
+
+@app.delete("/api/group/people/{name}")
+def remove_person(name: str) -> dict:
+    """Take someone out of the group. Their seat on the iMessage line stays (Photon dashboard to release it)."""
+    with group_store.editing() as g:
+        person = _person_or_404(g, name)
+        g.people.remove(person)
+    return _group_view()
+
+
+class GroupEdit(BaseModel):
+    place: Optional[str] = Field(None, max_length=120)
+    size: Optional[int] = Field(None, ge=1, le=10)
+
+
+@app.patch("/api/group")
+def edit_group(req: GroupEdit) -> dict:
+    with group_store.editing() as g:
+        if req.place is not None and req.place.strip():
+            g.place = req.place.strip()
+        if req.size is not None:
+            g.size = req.size
+    return _group_view()
+
+
+@app.post("/api/group/demo")
+def load_demo_group() -> dict:
+    """Alex, Sam and Jordan with their usual priorities, the 12 demo listings, UCLA. For judging: no phones needed."""
+    with group_store.editing() as g:
+        g.people = group_store.demo_people()
+        g.place, g.size, g.listings = "UCLA", 3, None
+    return _group_view()
+
+
+@app.post("/api/group/reset")
+def reset_group() -> dict:
+    """Start over: nobody in the group, demo listings, UCLA. Seats on the iMessage line are not released."""
+    with group_store.editing() as g:
+        g.people, g.place, g.size, g.listings = [], "UCLA", 3, None
+    return _group_view()
+
+
+class ListingsRequest(BaseModel):
+    listings: list[Listing]
+
+
+@app.get("/api/group/listings")
+def group_listings() -> list[Listing]:
+    """The places on the group's map: what was saved (searches, pasted), else the 12 demo listings."""
+    return group_store.read().current_listings()
+
+
+@app.put("/api/group/listings")
+def save_listings(req: ListingsRequest) -> dict:
+    """The places on the page's map, so the bot picks from the same ones (RentCast results, pasted listings)."""
+    with group_store.editing() as g:
+        g.listings = req.listings
+    return {"saved": len(req.listings)}
+
+
+@app.post("/api/group/decide")
+def decide_for_group() -> dict:
+    """The fair pick for the whole group over the group's listings: exactly what the bot texts back."""
+    g = group_store.read()
+    if not g.people:
+        raise HTTPException(status_code=400, detail="Nobody in the group yet.")
+    return photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)

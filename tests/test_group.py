@@ -175,3 +175,11 @@ def test_unknown_wish_for_one_roommate_marks_the_listing_partial():
     result = decide([make_listing()], [r, SAVER], want_facts={(0, 0): [{"value": None}], (0, 1): []})
     row = result["ranking"][0]
     assert row["unknown"] == ["has: pets allowed"] and row["partial_data"] is True
+
+
+def test_rent_is_split_by_the_expected_group_size_not_just_who_is_added():
+    alone = person("Me", budget=1500, rent=5)
+    place = make_listing(id="p", rent_total_monthly=4500, bedrooms=3)
+    assert decide([place], [alone])["ranking"][0]["rent_per_person"] == 4500
+    assert decide([place], [alone], group_size=3)["ranking"][0]["rent_per_person"] == 1500
+    assert decide([place], [alone, SAVER], group_size=1)["ranking"][0]["rent_per_person"] == 2250  # Never fewer than added.

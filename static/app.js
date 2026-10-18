@@ -9,11 +9,7 @@ const DEFAULT_HOME = { name: "UCLA", latlng: [34.0699182, -118.4438495] };
 let home = { ...DEFAULT_HOME };
 const WALK_CIRCLE_MINUTES = 35;
 const WALK_METERS_PER_MINUTE = 80; // ~3 mph, so 35 min is about 2.8 km (1.75 mi), as in the earlier map
-// Must match CRITERIA in app/scoring.py.
-const FACTORS = ["rent", "commute", "laundry", "parking", "bedrooms"];
 const FACTOR_LABELS = { rent: "Rent", commute: "Commute", laundry: "Laundry", parking: "Parking", bedrooms: "Bedrooms" };
-// Shown when hovering a rating button.
-const RATING_WORDS = ["don't care", "a little", "somewhat", "matters", "a lot", "deal-breaker"];
 // Must match TravelMode in app/models.py. The words are used in sentences like "31 min by bike".
 const TRAVEL_MODES = { WALK: "walking", BICYCLE: "by bike", TRANSIT: "by transit", DRIVE: "driving" };
 
@@ -34,11 +30,8 @@ const PARSE_STEPS = ["Reading the listing…", "Checking each fact against the t
                      "Finding it on the map…", "Looking up walk and bike times…", "Finding groceries nearby…"];
 
 let listings = [];
-let roommates = [
-  { name: "Alex", budget: 1500, place: "", travel_mode: "WALK", weights: { rent: 5, commute: 2, laundry: 3, parking: 1, bedrooms: 2 } },
-  { name: "Sam", budget: 1900, place: "", travel_mode: "WALK", weights: { rent: 2, commute: 5, laundry: 3, parking: 4, bedrooms: 3 } },
-  { name: "Jordan", budget: 1700, place: "", travel_mode: "WALK", weights: { rent: 3, commute: 3, laundry: 5, parking: 2, bedrooms: 3 } },
-];
+// Everyone in the group, from the backend's shared group (group.js keeps this in step).
+let roommates = [];
 let demoIds = new Set(); // The pre-loaded UCLA listings, so "Start fresh" can remove them.
 let markers = {};
 let homeLayers = [];
@@ -96,8 +89,13 @@ const score = s => (s == null ? "—" : s); // A score can be missing when too m
 
 // Same rule as rent_per_person() in app/scoring.py: split the whole-unit rent, else use the listed
 // per-bed or per-room price as is (each person pays it), else unknown. Never guess.
+// How many people share the rent: the group's expected size until everyone has been added.
+function groupSize() {
+  return Math.max(roommates.length, window.groupInfo?.size || 0, 1);
+}
+
 function rentPerPerson(l) {
-  if (l.rent_total_monthly != null) return Math.round(l.rent_total_monthly / Math.max(roommates.length, 1));
+  if (l.rent_total_monthly != null) return Math.round(l.rent_total_monthly / groupSize());
   if (l.rent_per_person_listed != null) return l.rent_per_person_listed;
   return null;
 }
@@ -239,41 +237,9 @@ function focusListing(id) {
 }
 
 // ---------- Roommates ----------
+// The group's cards are drawn by group.js (from what each person said; no 0–5 grid).
 function renderRoommates() {
-  document.getElementById("roommates").innerHTML = roommates.map((r, i) => `
-    <div class="roommate">
-      <div class="roommate-head">
-        <input type="text" value="${esc(r.name)}" aria-label="Roommate name" onchange="roommates[${i}].name=this.value">
-        <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="any" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value; budgetsChanged()"></span>
-        ${roommates.length > 1 ? `<button class="remove" title="Remove ${esc(r.name)}" aria-label="Remove ${esc(r.name)}" onclick="removeRoommate(${i})">×</button>` : ""}
-      </div>
-      <div class="roommate-commute">
-        <input type="text" value="${esc(r.place || "")}" placeholder="Going to: ${esc(home.name || "our place")} (or type another)"
-               aria-label="Where ${esc(r.name)} needs to get to" title="Type a specific place, e.g. Santa Monica Pier, Santa Monica, CA"
-               onchange="roommates[${i}].place=this.value.trim()">
-        <select aria-label="How ${esc(r.name)} gets there" onchange="roommates[${i}].travel_mode=this.value">
-          ${Object.entries(TRAVEL_MODES).map(([m, w]) => `<option value="${m}"${(r.travel_mode || "WALK") === m ? " selected" : ""}>${w[0].toUpperCase() + w.slice(1)}</option>`).join("")}
-        </select>
-      </div>
-      ${FACTORS.map(f => `
-        <div class="rating"><span>${FACTOR_LABELS[f]}</span>
-          <div class="rating-buttons" role="radiogroup" aria-label="How much ${esc(FACTOR_LABELS[f].toLowerCase())} matters to ${esc(r.name)}">
-            ${[0, 1, 2, 3, 4, 5].map(v => `<button type="button" role="radio" aria-checked="${r.weights[f] === v}"
-              class="${r.weights[f] === v ? "on" : ""}" title="${v}: ${RATING_WORDS[v]}"
-              onclick="setWeight(${i}, '${f}', ${v}, this)">${v}</button>`).join("")}
-          </div></div>`).join("")}
-      ${typeof wishChips === "function" ? wishChips(r) : ""}
-    </div>`).join("");
-}
-
-// Updates only the clicked row, so the rest of the panel doesn't redraw.
-function setWeight(i, f, v, btn) {
-  roommates[i].weights[f] = v;
-  for (const b of btn.parentElement.children) {
-    const on = b === btn;
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-checked", on);
-  }
+  if (typeof renderGroup === "function") renderGroup();
 }
 
 // Budgets set the marker colors.
@@ -285,6 +251,8 @@ function budgetsChanged() {
 // The group's destination changed: find it on the map (if the backend can) and clear the old pick.
 async function setHome(text) {
   const name = text.trim() || DEFAULT_HOME.name;
+  fetch("/api/group", { method: "PATCH", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ place: name }) }).catch(() => {});
   home = name.toLowerCase() === DEFAULT_HOME.name.toLowerCase() ? { ...DEFAULT_HOME } : { name, latlng: null };
   if (!home.latlng) {
     try {
@@ -308,6 +276,7 @@ async function setHome(text) {
 function clearDemo() {
   listings = listings.filter(l => !demoIds.has(l.id));
   demoIds.clear();
+  window.saveListings?.();
   document.getElementById("startFresh").hidden = true;
   lastDecision = null;
   showEmptyResult();
@@ -320,27 +289,7 @@ function clearDemo() {
 
 function showEmptyResult() {
   document.getElementById("result").innerHTML =
-    '<div class="empty">No pick yet. Set everyone\'s priorities, then press the button.</div>';
-}
-
-// The group size changes rent per person, so the old decision and marker colors are stale.
-function roommatesChanged() {
-  lastDecision = null;
-  showEmptyResult();
-  renderRoommates();
-  renderLegend();
-  drawListings();
-}
-
-function addRoommate() {
-  roommates.push({ name: "Roommate " + (roommates.length + 1), budget: 1500, place: "", travel_mode: "WALK",
-                   weights: { rent: 3, commute: 3, laundry: 3, parking: 3, bedrooms: 3 } });
-  roommatesChanged();
-}
-
-function removeRoommate(i) {
-  roommates.splice(i, 1);
-  roommatesChanged();
+    '<div class="empty">No pick yet. Once everyone has said what they want, press the button. It updates by itself after that.</div>';
 }
 
 // ---------- Backend calls ----------
@@ -357,7 +306,7 @@ async function runDecision() {
     const res = await fetch("/api/decide", {
       method: "POST", headers: { "Content-Type": "application/json" },
       // A blank place uses the group's; null means the backend's default (UCLA).
-      body: JSON.stringify({ listings, roommates: roommates.map(r => ({ ...r, place: placeFor(r) })) }),
+      body: JSON.stringify({ listings, roommates: roommates.map(r => ({ ...r, place: placeFor(r) })), group_size: groupSize() }),
     });
     const d = await res.json();
     if (!res.ok) { out.innerHTML = `<div class="status error">Couldn't decide: ${esc(d.detail)}</div>`; return; }
@@ -427,6 +376,7 @@ async function parseListing() {
     const body = await res.json();
     if (!res.ok) { status.className = "status error"; status.textContent = "Couldn't read that listing: " + body.detail; return; }
     listings.push(body);
+    window.saveListings?.();
     lastDecision = null;
     showEmptyResult();
     drawListings();
@@ -488,11 +438,11 @@ showScreen(false);
 renderRoommates();
 renderLegend();
 drawHome();
-fetch("/api/demo")
+fetch("/api/group/listings")
   .then(r => r.json())
   .then(data => {
     listings = data;
-    demoIds = new Set(data.map(l => l.id));
+    demoIds = new Set(data.filter(l => !l.source || l.source === "demo").map(l => l.id));
     map.fitBounds(drawListings(), { padding: [40, 40] });
   })
   .catch(() => {

@@ -31,3 +31,4 @@
   .welcome-ask-row label:first-child { grid-column: 1 / -1; }
   .welcome-ask-row label.narrow input { width: 100%; }
 }
+.welcome-error { color: var(--warn); font-weight: 600; }

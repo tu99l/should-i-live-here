@@ -1,33 +1,40 @@
-"""iMessage bot tests. Photon is a fake server (httpx.MockTransport): nothing is really sent.
+"""iMessage bot and the shared group. Photon is a fake server (httpx.MockTransport): nothing is really sent.
 
-Texts here use the short "laundry 5" style, which is read by plain code, and listings with no
-wishes to look up, so no Gemini or Google calls happen either.
+Texts here use the short "laundry 5" style, read by plain code, and listings with no wishes to look
+up, so no Gemini or Google calls happen either.
 """
 import json
 
 import httpx
 import pytest
 
-from app import cache, photon_bot
+from app import cache, group_store, photon_bot
+from app.models import Listing, Roommate, Weights
 
-ROSTER = {"roommates": [
-    {"name": "Freddy", "phone": "+14245550100", "budget": 1500,
-     "weights": {"rent": 5, "commute": 2, "laundry": 0, "parking": 1, "bedrooms": 2}},
-    {"name": "Sam", "phone": None, "budget": 1900,
-     "weights": {"rent": 2, "commute": 5, "laundry": 3, "parking": 4, "bedrooms": 3}},
-]}
 LISTINGS = [
-    photon_bot.Listing(id="cheap", title="Cheap Place", rent_total_monthly=2400, bedrooms=2,
-                       walk_minutes=15, laundry="shared", parking="paid"),
-    photon_bot.Listing(id="washer", title="Washer Place", rent_total_monthly=3000, bedrooms=2,
-                       walk_minutes=15, laundry="in_unit", parking="paid"),
+    Listing(id="cheap", title="Cheap Place", rent_total_monthly=2400, bedrooms=2, walk_minutes=15,
+            laundry="shared", parking="paid"),
+    Listing(id="washer", title="Washer Place", rent_total_monthly=3000, bedrooms=2, walk_minutes=15,
+            laundry="in_unit", parking="paid"),
 ]
 
 
+def person(name, phone=None, me=False, connected=True, **weights):
+    w = Weights(**{**dict(rent=3, commute=3, laundry=3, parking=3, bedrooms=3), **weights})
+    return group_store.Person(name=name, me=me, phone=phone, connected=connected,
+                              roommate=Roommate(name=name, budget=1500 if name == "Freddy" else 1900, weights=w))
+
+
 @pytest.fixture(autouse=True)
-def temp_state(tmp_path, monkeypatch):
+def temp_files(tmp_path, monkeypatch):
     monkeypatch.setattr(cache, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(photon_bot, "STATE_FILE", tmp_path / "bot" / "state.json")
+    monkeypatch.setattr(group_store, "GROUP_FILE", tmp_path / "group.local.json")
+    monkeypatch.setattr(group_store, "OLD_ROSTER", tmp_path / "missing.json")
+    with group_store.editing() as g:
+        g.people = [person("Freddy", "+14245550100", me=True, rent=5, laundry=0),
+                    person("Sam", rent=2, commute=5, parking=4)]
+        g.listings, g.size = LISTINGS, 2
 
 
 def incoming(msg_id, text, handle="+14245550100", created="2026-10-18T02:00:00Z"):
@@ -69,35 +76,37 @@ def bot(fake):
     return photon_bot.Photon("fake-key", "pho_prj_test", http=http)
 
 
-def fresh_state(connected=("Freddy",)):
-    state = photon_bot.load_state(ROSTER)
-    state["since"] = "2026-10-18T00:00:00Z"
-    state["connected"] = list(connected)  # Already said hello, so texts are read as wishes.
-    return state
+def fresh_state():
+    return {"answered": [], "since": "2026-10-18T00:00:00Z"}
 
 
-def test_a_text_changes_that_roommates_weights_and_replies_with_the_pick():
-    state = fresh_state()
-    reply = photon_bot.handle_text("Freddy", "laundry 5, rent 0", state, ROSTER, LISTINGS)
-    assert state["roommates"]["Freddy"].weights.laundry == 5
-    assert state["roommates"]["Freddy"].weights.rent == 0
+def quiet(*_):
+    pass
+
+
+# ---------- Texts change the shared group ----------
+
+def test_a_text_saves_wishes_in_the_shared_group_and_replies_with_the_pick():
+    reply = photon_bot.handle_text("Freddy", "laundry 5, rent 0")
+    freddy = group_store.read().find("Freddy")
+    assert freddy.roommate.weights.laundry == 5 and freddy.roommate.weights.rent == 0
+    assert freddy.last_text == "laundry 5, rent 0"
     assert reply.startswith("Got it, Freddy: rent: don't care; laundry: must-have.")
-    assert "Fairest pick for Freddy & Sam: Washer Place, $1,500 each." in reply
+    assert "Fairest pick for Freddy & Sam: Washer Place, $1,500 each." in reply  # The group's own listings.
 
 
 def test_reset_and_pick_commands():
-    state = fresh_state()
-    photon_bot.handle_text("Freddy", "laundry 5", state, ROSTER, LISTINGS)
-    reply = photon_bot.handle_text("Freddy", "reset", state, ROSTER, LISTINGS)
-    assert state["roommates"]["Freddy"].weights.laundry == 0 and reply.startswith("Cleared")
-    assert photon_bot.handle_text("Freddy", "Pick?", state, ROSTER, LISTINGS).startswith("Fairest pick")
+    photon_bot.handle_text("Freddy", "laundry 5")
+    reply = photon_bot.handle_text("Freddy", "reset")
+    assert group_store.read().find("Freddy").roommate.weights.laundry == 3 and reply.startswith("Cleared")
+    assert photon_bot.handle_text("Freddy", "Pick?").startswith("Fairest pick")
 
 
 def test_each_text_is_answered_once_with_an_idempotency_key():
     fake = FakePhoton([incoming("pho_msg_1", "laundry 5")])
     photon, state = bot(fake), fresh_state()
-    assert photon_bot.process(photon, state, ROSTER, LISTINGS, log=lambda *_: None) == 1
-    assert photon_bot.process(photon, state, ROSTER, LISTINGS, log=lambda *_: None) == 0  # Not again.
+    assert photon_bot.process(photon, state, log=quiet) == 1
+    assert photon_bot.process(photon, state, log=quiet) == 0  # Not again.
     key, body = fake.sent[0]
     assert key == "silh-reply:pho_msg_1"
     assert body["spaceId"] == "pho_spc_1" and body["senderId"] == "pho_usr_agent"
@@ -106,24 +115,20 @@ def test_each_text_is_answered_once_with_an_idempotency_key():
 
 def test_answered_texts_survive_a_restart():
     fake = FakePhoton([incoming("pho_msg_1", "laundry 5")])
-    photon_bot.process(bot(fake), fresh_state(), ROSTER, LISTINGS, log=lambda *_: None)
-    restarted = photon_bot.load_state(ROSTER)
-    assert restarted["connected"] == ["Freddy"]
-    assert photon_bot.process(bot(fake), restarted, ROSTER, LISTINGS, log=lambda *_: None) == 0
-    assert restarted["roommates"]["Freddy"].weights.laundry == 5  # Wishes were saved too.
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
+    assert photon_bot.process(bot(fake), photon_bot.load_state(), log=quiet) == 0
 
 
 def test_unknown_number_gets_a_polite_reply_and_no_changes():
     fake = FakePhoton([incoming("pho_msg_2", "laundry 5", handle="+19995550123")])
-    state = fresh_state()
-    photon_bot.process(bot(fake), state, ROSTER, LISTINGS, log=lambda *_: None)
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
     assert "don't know this number" in fake.sent[0][1]["content"]["text"]
-    assert state["roommates"]["Freddy"].weights.laundry == 0
+    assert group_store.read().find("Freddy").roommate.weights.laundry == 0
 
 
 def test_phone_numbers_match_whatever_the_formatting():
     fake = FakePhoton([incoming("pho_msg_3", "help", handle="+1 (424) 555-0100")])
-    photon_bot.process(bot(fake), fresh_state(), ROSTER, LISTINGS, log=lambda *_: None)
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
     assert fake.sent[0][1]["content"]["text"].startswith("Hi Freddy!")
 
 
@@ -132,26 +137,29 @@ def test_a_crash_while_looking_up_still_gets_a_reply(monkeypatch):
         raise RuntimeError("Google is down")
     monkeypatch.setattr(photon_bot, "run_decision", boom)
     fake = FakePhoton([incoming("pho_msg_4", "laundry 5")])
-    photon_bot.process(bot(fake), fresh_state(), ROSTER, LISTINGS, log=lambda *_: None)
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
     assert fake.sent[0][1]["content"]["text"].startswith("Sorry, something went wrong")
 
 
-def test_the_example_roster_has_no_real_numbers():
-    roster = json.loads(photon_bot.ROSTER_EXAMPLE.read_text())
-    assert all(r["phone"] is None or r["phone"].startswith("+1555555") for r in roster["roommates"])
+def test_first_text_gets_a_greeting_and_marks_them_texting():
+    with group_store.editing() as g:
+        g.find("Freddy").connected = False
+    fake = FakePhoton([incoming("pho_msg_5", "Hi, it's Freddy! Let's find our apartment."),
+                       incoming("pho_msg_6", "laundry 5", created="2026-10-18T02:01:00Z")])
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
+    assert fake.sent[0][1]["content"]["text"].startswith("Hi Freddy! I'm the apartment bot for Freddy & Sam.")
+    assert fake.sent[1][1]["content"]["text"].startswith("Got it, Freddy")  # Second text: not greeted again.
+    assert group_store.read().find("Freddy").connected is True
 
 
-def test_first_text_gets_a_greeting_then_texts_are_wishes():
-    fake = FakePhoton([incoming("pho_msg_5", "Hi, it's Freddy! Let's find our apartment.")])
-    state = fresh_state(connected=())
-    photon_bot.process(bot(fake), state, ROSTER, LISTINGS, log=lambda *_: None)
-    reply = fake.sent[0][1]["content"]["text"]
-    assert reply.startswith("Hi Freddy! I'm the apartment bot for Freddy & Sam.")
-    assert state["connected"] == ["Freddy"] and state["roommates"]["Freddy"].weights.laundry == 0
-    fake.messages.append(incoming("pho_msg_6", "laundry 5", created="2026-10-18T02:01:00Z"))
-    photon_bot.process(bot(fake), state, ROSTER, LISTINGS, log=lambda *_: None)
-    assert fake.sent[1][1]["content"]["text"].startswith("Got it, Freddy")
+def test_group_place_is_everyones_commute_unless_they_set_their_own():
+    rs = [Roommate(name="A", budget=1), Roommate(name="B", budget=1, place="Santa Monica Pier")]
+    out = photon_bot.with_group_place(rs, "Downtown LA")
+    assert [r.place for r in out] == ["Downtown LA", "Santa Monica Pier"]
+    assert photon_bot.with_group_place(rs, "UCLA") == rs  # UCLA = the default campus, nothing to fill in.
 
+
+# ---------- Inviting from the page ----------
 
 def test_phone_numbers_are_normalized_or_rejected():
     assert photon_bot.normalize_phone("(424) 555-0100") == "+14245550100"
@@ -161,15 +169,7 @@ def test_phone_numbers_are_normalized_or_rejected():
             photon_bot.normalize_phone(bad)
 
 
-@pytest.fixture
-def temp_roster(tmp_path, monkeypatch):
-    path = tmp_path / "roommates.local.json"
-    path.write_text(json.dumps(ROSTER))
-    monkeypatch.setattr(photon_bot, "ROSTER_FILE", path)
-    return path
-
-
-def test_inviting_a_roommate_assigns_a_line_and_saves_them(temp_roster):
+def test_inviting_adds_a_person_with_a_line_and_keeps_existing_wishes():
     fake = FakePhoton()
     out = photon_bot.invite_roommate(bot(fake), "Sam", "424-555-0177", email="sam@example.com")
     assert out["line"] == "+16285550199" and out["email_invite"] is True
@@ -177,30 +177,33 @@ def test_inviting_a_roommate_assigns_a_line_and_saves_them(temp_roster):
     post = next(r for r in fake.requests if r.method == "POST")
     assert json.loads(post.content) == {"handle": "+14245550177", "firstName": "Sam", "email": "sam@example.com"}
     assert post.headers["idempotency-key"] == "silh-assign:14245550177"
-    saved = json.loads(temp_roster.read_text())["roommates"]
-    sam = next(e for e in saved if e["name"] == "Sam")
-    assert sam["phone"] == "+14245550177" and sam["weights"]["commute"] == 5  # Kept Sam's priorities.
+    sam = group_store.read().find("Sam")
+    assert sam.phone == "+14245550177" and sam.roommate.weights.commute == 5  # Kept Sam's priorities.
 
 
-def test_inviting_someone_already_on_the_line_reuses_their_number(temp_roster):
+def test_inviting_someone_already_on_the_line_reuses_their_number():
     fake = FakePhoton(assignments=[{"handle": "+14245550188", "assignedPhoneNumber": "+16285550111"}])
     out = photon_bot.invite_roommate(bot(fake), "Tu", "+1 424 555 0188", budget=1600)
     assert out["line"] == "+16285550111"
-    tu = json.loads(temp_roster.read_text())["roommates"][-1]
-    assert tu["name"] == "Tu" and tu["budget"] == 1600
+    tu = group_store.read().find("Tu")
+    assert tu.roommate.budget == 1600 and tu.connected is False
 
 
-def test_new_roommate_from_the_website_is_known_without_a_restart(temp_roster):
-    state = fresh_state()
+def test_new_person_from_the_page_is_known_to_the_bot_right_away():
     photon_bot.invite_roommate(bot(FakePhoton()), "Tu", "4245550188")
     fake = FakePhoton([incoming("pho_msg_7", "hello", handle="+14245550188")])
-    photon_bot.process(bot(fake), state, photon_bot.load_roster(), LISTINGS, log=lambda *_: None)
+    photon_bot.process(bot(fake), fresh_state(), log=quiet)
     assert fake.sent[0][1]["content"]["text"].startswith("Hi Tu! I'm the apartment bot for Freddy, Sam & Tu.")
 
 
-def test_roster_status_never_shows_full_numbers(temp_roster):
+def test_the_page_never_gets_full_phone_numbers():
     photon_bot.invite_roommate(bot(FakePhoton()), "Tu", "4245550188")
-    status = photon_bot.roster_status()
-    tu = next(r for r in status if r["name"] == "Tu")
+    view = group_store.public_view(group_store.read(), photon_bot.text_link)
+    tu = next(p for p in view["people"] if p["name"] == "Tu")
     assert tu["phone_last4"] == "0188" and tu["connected"] is False and tu["text_link"]
-    assert "4245550188" not in json.dumps(status)
+    assert "4245550188" not in json.dumps(view)
+
+
+def test_the_example_roster_has_no_real_numbers():
+    roster = json.loads((photon_bot.ROOT / "data" / "roommates.example.json").read_text())
+    assert all(r["phone"] is None or r["phone"].startswith("+1555555") for r in roster["roommates"])

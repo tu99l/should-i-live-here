@@ -26,14 +26,12 @@ from typing import Optional
 
 import httpx
 
-from . import group, maps_lookup, wishes
+from . import group, group_store, maps_lookup, wishes
 from .cache import CACHE_DIR
 from .models import Listing, Roommate
 
 ROOT = Path(__file__).resolve().parent.parent
-ROSTER_FILE = ROOT / "data" / "roommates.local.json"      # Real numbers, git-ignored.
-ROSTER_EXAMPLE = ROOT / "data" / "roommates.example.json"  # Fake numbers, committed.
-STATE_FILE = CACHE_DIR / "bot" / "state.json"              # Saved wishes + answered message IDs.
+STATE_FILE = CACHE_DIR / "bot" / "state.json"  # Which texts were answered. People and wishes: group_store.
 API = "https://api.photon.codes/v1"
 POLL_SECONDS = 2
 
@@ -42,20 +40,7 @@ HELP = ("Text me what you want in a place, in your own words, e.g. \"close to a 
         "\"pick\" = current pick, \"reset\" = clear your wishes.")
 
 
-# ---------- Roommates and saved state ----------
-
-def load_roster() -> dict:
-    """{"roommates": [{name, phone, email, line, budget, weights...}]}. Local file if present, else the example.
-
-    The website adds people here (invite_roommate), so the bot re-reads it on every check.
-    """
-    path = ROSTER_FILE if ROSTER_FILE.exists() else ROSTER_EXAMPLE
-    return json.loads(path.read_text())
-
-
-def save_roster(roster: dict) -> None:
-    ROSTER_FILE.write_text(json.dumps(roster, indent=2) + "\n")
-
+# ---------- The group (shared with the web page) and the bot's own bookkeeping ----------
 
 def phone_key(handle: str) -> str:
     """Compare phone numbers by digits only, so "+1 (424) ..." and "+1424..." match."""
@@ -73,53 +58,34 @@ def normalize_phone(raw: str) -> str:
     return "+" + digits
 
 
-def _starting_roommate(entry: dict) -> Roommate:
-    """A roster entry as a Roommate (phone, email and line are contact details, not preferences)."""
-    return Roommate(**{k: v for k, v in entry.items() if k in Roommate.model_fields})
-
-
-def load_state(roster: dict) -> dict:
+def load_state() -> dict:
+    """Which texts the bot already answered, and from when to look. The group itself is in group_store."""
     state = {}
     if STATE_FILE.exists():
         try:
             state = json.loads(STATE_FILE.read_text())
         except (OSError, json.JSONDecodeError):
             state = {}
-    out = {"answered": state.get("answered", []), "since": state.get("since"),
-           "connected": state.get("connected", []), "roommates": {},
-           "saved": state.get("roommates", {})}
-    sync_roommates(out, roster)
-    return out
-
-
-def sync_roommates(state: dict, roster: dict) -> None:
-    """Make state["roommates"] match the roster: add people the website just invited, keep saved wishes."""
-    saved = state.setdefault("saved", {})
-    current = {}
-    for entry in roster["roommates"]:
-        name = entry["name"]
-        if name in state["roommates"]:
-            current[name] = state["roommates"][name]
-        elif name in saved:
-            current[name] = Roommate(**saved[name])
-        else:
-            current[name] = _starting_roommate(entry)
-    state["roommates"] = current
+    return {"answered": state.get("answered", []), "since": state.get("since")}
 
 
 def save_state(state: dict) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    roommates = {**state.get("saved", {}), **{n: r.model_dump() for n, r in state["roommates"].items()}}
-    STATE_FILE.write_text(json.dumps({
-        "answered": state["answered"][-500:],
-        "since": state["since"],
-        "connected": state.get("connected", []),
-        "roommates": roommates,
-    }, indent=2))
+    old = {}
+    if STATE_FILE.exists():  # Keep anything else in the file (older versions kept wishes here).
+        try:
+            old = json.loads(STATE_FILE.read_text())
+        except (OSError, json.JSONDecodeError):
+            old = {}
+    old.update(answered=state["answered"][-500:], since=state["since"])
+    STATE_FILE.write_text(json.dumps(old, indent=2))
 
 
-def demo_listings() -> list[Listing]:
-    return [Listing(**d) for d in json.loads((ROOT / "data" / "demo_listings.json").read_text())]
+def with_group_place(roommates: list[Roommate], place: str) -> list[Roommate]:
+    """Everyone without their own place commutes to the group's place (UCLA = the default campus)."""
+    if not place or place.strip().casefold() == "ucla":
+        return roommates
+    return [r if (r.place or "").strip() else r.model_copy(update={"place": place}) for r in roommates]
 
 
 # ---------- Turning a text into a reply (plain code; testable without Photon) ----------
@@ -190,38 +156,48 @@ def pick_summary(decision: dict, roommate_name: str) -> str:
     return "\n".join(lines)
 
 
-def run_decision(roommates: list[Roommate], listings: list[Listing]) -> dict:
+def run_decision(roommates: list[Roommate], listings: list[Listing], place: str = "UCLA",
+                 group_size: Optional[int] = None) -> dict:
     """Our own scoring and fair pick, with facts from Google and the listing texts (cached)."""
+    roommates = with_group_place(roommates, place)
     commutes = maps_lookup.commutes_for(listings, roommates)
     facts = wishes.want_facts_for(listings, roommates)
-    return group.decide(listings, roommates, commutes, facts)
+    return group.decide(listings, roommates, commutes, facts, group_size)
 
 
-def handle_text(name: str, text: str, state: dict, roster: dict, listings: list[Listing]) -> str:
-    """One incoming text from a known roommate -> the reply. Updates state["roommates"]."""
+def current_pick(name: str) -> str:
+    g = group_store.read()
+    return pick_summary(run_decision(g.roommates(), g.current_listings(), g.place, g.size), name)
+
+
+def handle_text(name: str, text: str) -> str:
+    """One incoming text from a person in the group -> the reply. Saves their wishes in the shared group."""
     command = text.strip().casefold().rstrip("?!.")
-    roommates = state["roommates"]
     if command in ("help", "hi", "hello", "hey", "start"):
         return f"Hi {name}! " + HELP
     if command == "reset":
-        entry = next(e for e in roster["roommates"] if e["name"] == name)
-        roommates[name] = _starting_roommate(entry)
-        return f"Cleared your wishes, {name}. Back to your starting priorities.\n\n" + \
-            pick_summary(run_decision(list(roommates.values()), listings), name)
+        with group_store.editing() as g:
+            person = g.find(name)
+            person.roommate = group_store.starting_roommate(person.name, person.roommate.budget)
+            person.last_text = None
+        return f"Cleared your wishes, {name}.\n\n" + current_pick(name)
     if command in ("pick", "status", "results"):
-        return pick_summary(run_decision(list(roommates.values()), listings), name)
+        return current_pick(name)
 
-    w = wishes.parse_wishes(text)
+    w = wishes.parse_wishes(text)  # Slow (Gemini): done before taking the group's lock.
     if w.is_empty():
         return "Tell me what matters to you in a place. " + HELP
-    roommates[name] = wishes.apply_wishes(roommates[name], w)
+    with group_store.editing() as g:
+        person = g.find(name)
+        person.roommate = wishes.apply_wishes(person.roommate, w)
+        person.last_text = text
     parts = [f"Got it, {name}: " + "; ".join(wishes.describe(w)) + "."] if wishes.describe(w) else []
     if w.cannot_check:
         parts.append("Can't check " + ", ".join(f'"{q}"' for q in w.cannot_check)
                      + ": no listing or map shows that, so it's not scored.")
     if w.not_understood:
         parts.append("Didn't catch " + ", ".join(f'"{q}"' for q in w.not_understood) + ".")
-    parts.append(pick_summary(run_decision(list(roommates.values()), listings), name))
+    parts.append(current_pick(name))
     return "\n\n".join(parts)
 
 
@@ -307,19 +283,16 @@ def _text_of(message: dict) -> Optional[str]:
     return content.get("text") if content.get("type") == "text" else None
 
 
-def greeting(name: str, roster: dict) -> str:
-    names = [e["name"] for e in roster["roommates"]]
+def greeting(name: str, group: group_store.Group) -> str:
+    names = [p.name for p in group.people]
     group = ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 1 else names[0]
     return (f"Hi {name}! I'm the apartment bot for {group}. I'll find the place that's fairest for everyone.\n"
             "What do you want in a place? Say it however you like, e.g. \"close to a gym, in-unit laundry, "
             "need gas and water included, under $1,500\". Text \"pick\" anytime for the current pick.")
 
 
-def process(photon: Photon, state: dict, roster: dict, listings: list[Listing], log=print) -> int:
+def process(photon: Photon, state: dict, log=print) -> int:
     """Answer every new text once. Returns how many were answered."""
-    sync_roommates(state, roster)  # Someone may have just been added on the website.
-    phones = {phone_key(e["phone"]): e["name"] for e in roster["roommates"] if e.get("phone")}
-    connected = state.setdefault("connected", [])
     answered = 0
     for m in photon.received_since(state["since"]):
         sender = (m.get("sentBy") or {})
@@ -331,26 +304,26 @@ def process(photon: Photon, state: dict, roster: dict, listings: list[Listing], 
         save_state(state)
         if not text or (m.get("space") or {}).get("kind") != "direct":
             continue
+        group = group_store.read()  # Fresh for every text: the page or an earlier text may have changed it.
+        phones = {phone_key(p.phone): p.name for p in group.people if p.phone}
         name = phones.get(phone_key(sender.get("handle", "")))
         log(f"<- {name or 'unknown number'}: {text}")
         if name is None:
             reply = "Hi! I don't know this number yet. Ask your group to add you to the roommate list."
-        elif name not in connected:
+        elif not group.find(name).connected:
             # Their first text (usually the pre-filled "Hi, it's Sam"): say hello and ask what they want.
-            connected.append(name)
-            save_state(state)
-            reply = greeting(name, roster)
+            with group_store.editing() as g:
+                g.find(name).connected = True
+            reply = greeting(name, group)
             if not wishes.quick_parse(text) and len(text.split()) > 6:  # They already said what they want.
                 try:
-                    reply += "\n\n" + handle_text(name, text, state, roster, listings)
-                    save_state(state)
+                    reply += "\n\n" + handle_text(name, text)
                 except Exception as e:
                     log(f"!! error handling text: {e!r}")
         else:
             photon.typing(m)
             try:
-                reply = handle_text(name, text, state, roster, listings)
-                save_state(state)
+                reply = handle_text(name, text)
             except Exception as e:  # Never leave someone on read: say so and keep running.
                 log(f"!! error handling text: {e!r}")
                 reply = "Sorry, something went wrong looking that up. Try again in a minute."
@@ -367,27 +340,21 @@ def main() -> None:
     key, project = os.getenv("PHOTON_API_KEY"), os.getenv("PHOTON_PROJECT_ID")
     if not key or not project:
         sys.exit("Set PHOTON_API_KEY and PHOTON_PROJECT_ID in .env first.")
-    roster = load_roster()
-    if not ROSTER_FILE.exists():
-        print(f"Note: using {ROSTER_EXAMPLE.name} (fake numbers). Copy it to {ROSTER_FILE.name} with real ones.")
-    state = load_state(roster)
+    state = load_state()
     if not state["since"]:  # First run: don't answer texts sent before the bot existed.
         state["since"] = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat(
             timespec="milliseconds").replace("+00:00", "Z")
         save_state(state)
     photon = Photon(key, project)
-    listings = demo_listings()
-    print(f"Listening for texts to the Photon line. Roommates: {', '.join(state['roommates'])}. Ctrl+C to stop.")
+    names = ", ".join(p.name for p in group_store.read().people) or "nobody yet"
+    print(f"Listening for texts to the Photon line. Group: {names}. Ctrl+C to stop.")
     while True:
         try:
-            process(photon, state, load_roster(), listings)
+            process(photon, state)
         except httpx.HTTPError as e:
             print(f"Photon error, will retry: {e}", file=sys.stderr)
         time.sleep(POLL_SECONDS)
 
-
-if __name__ == "__main__":
-    main()
 
 
 # ---------- Adding a roommate from the website ----------
@@ -403,7 +370,7 @@ def text_link(line: str, name: str) -> str:
 
 def invite_roommate(photon: Photon, name: str, phone: str, email: Optional[str] = None,
                     budget: Optional[float] = None) -> dict:
-    """Add (or update) a roommate: give them a seat on the iMessage line and save them in the roster.
+    """Add (or update) a person: give them a seat on the iMessage line and add them to the shared group.
 
     They still send the first text (a shared line can't text first), but the website hands them a
     one-tap link with everything filled in, and Photon emails them an invite if we have their email.
@@ -413,39 +380,27 @@ def invite_roommate(photon: Photon, name: str, phone: str, email: Optional[str] 
         raise ValueError("Name is required.")
     phone = normalize_phone(phone)
     line = photon.assign(phone, name, email)
-
-    roster = load_roster() if ROSTER_FILE.exists() else {"roommates": []}
-    entry = next((e for e in roster["roommates"] if e["name"].casefold() == name.casefold()), None)
-    if entry is None:  # Someone else may already use this number under another name: replace that entry.
-        entry = next((e for e in roster["roommates"] if e.get("phone") and phone_key(e["phone"]) == phone_key(phone)), None)
-    if entry is None:
-        entry = {"name": name, "budget": budget or 1500}
-        roster["roommates"].append(entry)
-    entry.update(name=name, phone=phone, line=line)
-    if email:
-        entry["email"] = email
-    if budget:
-        entry["budget"] = budget
-    save_roster(roster)
+    with group_store.editing() as g:
+        person = g.find(name) or next((p for p in g.people if p.phone and phone_key(p.phone) == phone_key(phone)), None)
+        if person is None:
+            person = group_store.Person(name=name, roommate=group_store.starting_roommate(name, budget or 1500))
+            g.people.append(person)
+        person.name = name
+        person.roommate.name = name
+        person.phone, person.line = phone, line
+        if email:
+            person.email = email
+        if budget:
+            person.roommate.budget = budget
     return {"name": name, "line": line, "text_link": text_link(line, name), "email_invite": bool(email),
             "starter_text": STARTER_TEXT.format(name=name)}
 
 
 def roster_status() -> list[dict]:
-    """Everyone in the group for the website: who has a number, who has texted the bot, their wishes."""
-    roster = load_roster() if ROSTER_FILE.exists() else {"roommates": []}
-    state = load_state(roster)
-    out = []
-    for e in roster["roommates"]:
-        r = state["roommates"][e["name"]]
-        line = e.get("line")
-        out.append({
-            "name": e["name"],
-            "phone_last4": (e.get("phone") or "")[-4:] or None,  # The full number never leaves the server.
-            "line": line,
-            "text_link": text_link(line, e["name"]) if line else None,
-            "connected": e["name"] in state["connected"],
-            "budget": r.budget,
-            "wants": [w.model_dump() for w in r.wants],
-        })
-    return out
+    """Everyone in the group, as the page shows them (last 4 digits only)."""
+    view = group_store.public_view(group_store.read(), text_link)
+    return [{**p, "budget": p["roommate"]["budget"], "wants": p["roommate"]["wants"]} for p in view["people"]]
+
+
+if __name__ == "__main__":
+    main()

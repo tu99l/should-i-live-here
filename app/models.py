@@ -108,3 +108,5 @@ class ParseRequest(BaseModel):
 class DecideRequest(BaseModel):
     listings: list[Listing]
     roommates: list[Roommate]
+    # How many people will share rent and bedrooms, if more than the roommates sent (not everyone added yet).
+    group_size: Optional[int] = Field(None, ge=1, le=10)

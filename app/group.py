@@ -41,12 +41,15 @@ def _reasons(result: dict) -> list[dict]:
 
 def decide(listings: list[Listing], roommates: list[Roommate],
            commutes: Optional[dict[tuple[int, int], Optional[float]]] = None,
-           want_facts: Optional[dict[tuple[int, int], list]] = None) -> dict:
+           want_facts: Optional[dict[tuple[int, int], list]] = None,
+           group_size: Optional[int] = None) -> dict:
     """`commutes` maps (listing index, roommate index) to that roommate's commute minutes
     (from maps_lookup.commutes_for). Without it, everyone's commute is the walk to campus.
     `want_facts` maps the same pairs to the facts for that roommate's own wishes
-    (from wishes.want_facts_for). Without it, every wish counts as unknown."""
-    group_size = len(roommates)
+    (from wishes.want_facts_for). Without it, every wish counts as unknown.
+    `group_size` is how many people will share the rent and the bedrooms: the group's expected size
+    when not everyone has been added yet (never fewer than the roommates given)."""
+    group_size = max(group_size or 0, len(roommates))
     results = []
     for li, listing in enumerate(listings):
         per_roommate = []

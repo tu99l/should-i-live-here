@@ -1,4 +1,4 @@
-/* "Invite by text" section (static/invite.js). Uses the tokens from styles.css. */
+/* "Your group" section (static/group.js): person cards, invite and add forms. Uses the tokens from styles.css. */
 .optional-tag { margin-left: auto; font: 600 10.5px var(--body); color: var(--muted); text-transform: uppercase;
                 letter-spacing: .05em; }
 .step.text-step { background: var(--navy); color: var(--gold); font-size: 11px; }
@@ -51,3 +51,37 @@
                         color: var(--ink); background: var(--panel); }
 .search-flag { display: block; margin-top: 4px; color: var(--warn); font-weight: 600; }
 .search-usage { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+
+/* Person cards (one per person in the group) */
+.person { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-bottom: 10px; display: grid; gap: 8px;
+          background: var(--panel); }
+.person-head { display: flex; align-items: center; gap: 8px; }
+.person-name { font: 800 15px var(--heading); color: var(--navy); }
+.person-head .digits { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.person-head .chip-status { margin-left: auto; }
+.chip-status.me { background: var(--gold-soft); color: var(--navy); }
+.person-facts { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.person-facts .budget { display: flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.person-facts .budget input { width: 76px; }
+.person-facts input, .person-facts select { font: 12.5px var(--body); padding: 5px 7px; border: 1px solid var(--line);
+                                            border-radius: 6px; background: var(--panel); color: var(--ink); min-width: 0; }
+.person-empty { font-size: 12.5px; color: var(--muted); }
+.person-empty a { color: var(--blue); }
+.person-said { font-size: 12px; color: var(--muted); font-style: italic; line-height: 1.4; }
+.person-note { font-size: 12px; color: var(--warn); }
+.person-ask { display: flex; gap: 6px; }
+.person-ask input { flex: 1; min-width: 0; font: 12.5px var(--body); padding: 6px 8px; border: 1px solid var(--line);
+                    border-radius: 6px; color: var(--ink); background: var(--panel); }
+.person-ask button { padding: 5px 12px; font-size: 12.5px; }
+.person-math summary, .add-people summary { cursor: pointer; font-size: 12px; color: var(--blue); font-weight: 600; }
+.person-math table { margin-top: 4px; }
+.person-math .hint { margin: 6px 0 0; font-size: 11.5px; }
+.wish-chip.dontcare { color: var(--muted); text-decoration: line-through; }
+@media (max-width: 420px) { .person-facts { grid-template-columns: 1fr 1fr; } .person-facts .person-place { grid-column: 1 / -1; } }
+
+/* Adding people */
+.add-people { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.add-people summary { font-size: 13px; }
+.add-people form { margin-top: 8px; }
+.group-links { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.group-links .link { color: var(--blue); }

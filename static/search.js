@@ -16,7 +16,7 @@
     const body = {
       place,
       radius_miles: +el("searchRadius").value || 2,
-      min_bedrooms: Math.max(roommates.length, 1),          // Enough bedrooms for everyone.
+      min_bedrooms: groupSize(),  // Enough bedrooms for everyone the group expects (app.js).
       max_rent_per_person: budgets.length ? Math.max(...budgets) : null,  // Skip places over every budget.
     };
     btn.disabled = true;
@@ -30,6 +30,7 @@
       if (!r.ok) throw new Error(data.detail || "The search didn't work.");
       found = data;
       listings = listings.filter(l => l.source !== "rentcast").concat(data.listings);
+      window.saveListings?.();  // So the bot picks from the same places.
       lastDecision = null;
       showEmptyResult();
       const bounds = drawListings();

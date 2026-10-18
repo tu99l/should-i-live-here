@@ -110,7 +110,7 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
-## Redesign: one group for the page and the bot (Freddy building now; Tu: please don't edit app.js, index.html, styles.css until it's pushed)
+## Redesign: one group for the page and the bot — done by Freddy (Tu: pull, then restyle freely)
 Problem: the page and the iMessage bot each had their own group (page: Alex/Sam/Jordan in the browser with 0–5 grids;
 bot: roommates.local.json), so a roommate's texts never changed their card.
 - **One group, saved by the backend** (`data/group.local.json`, git-ignored): people, their wishes, and the group's listings.
@@ -121,6 +121,13 @@ bot: roommates.local.json), so a roommate's texts never changed their card.
 - **No 0–5 grid as input.** Wishes set the weights. The math stays visible in the results and in "See the math" on each card.
 - **The pick updates itself** when anyone texts or changes something. The bot uses the same listings as the map (RentCast results too).
 - **"Load demo group"** fills Alex, Sam and Jordan with their usual wishes for judging (no phones needed).
+- Built: `app/group_store.py` (one file, `data/group.local.json`, locked writes so the page and bot never overwrite
+  each other), group endpoints in `main.py` (`/api/group`, `/me`, `/people`, `/people/{name}/wishes`, `/demo`, `/reset`,
+  `/listings`, `/decide`), `static/group.js` (cards, invite, add without phone), sidebar is now 1 Where, 2 Your group,
+  3 Fairest pick, 4 Add a listing. `invite.js` is gone (folded into group.js); `invite.css` is now `group.css`.
+- Rent is split by the group's expected size (welcome screen "People") until everyone is added.
+- Tested by clicking through in headless Chrome: load demo group, type a wish on a card, a change made like a text
+  shows up on its own, add and remove someone. No JS errors.
 - After this: feature freeze. Fixes, polish, demo video, Devpost.
 
 ## Welcome text box — done by Freddy (Tu: restyle freely)
