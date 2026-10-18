@@ -38,6 +38,11 @@ section h2 { font-family: var(--heading); font-weight: 800; font-size: 15px; col
 .roommate-head input[type=text] { flex: 1; font-weight: 600; }
 .roommate-head .budget { display: flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; }
 .roommate-head .budget input { width: 78px; }
+.roommate-commute { display: flex; gap: 6px; margin-bottom: 8px; }
+.roommate-commute input, .roommate-commute select { font: 12.5px var(--body); padding: 5px 7px; border: 1px solid var(--line);
+                                                    border-radius: 6px; background: #fff; color: var(--ink); min-width: 0; }
+.roommate-commute input { flex: 1; }
+.tip-sub { font-size: 10.5px; color: var(--muted); font-weight: 400; }
 .remove { background: none; color: var(--muted); border: 0; font-size: 18px; padding: 0 4px; cursor: pointer; }
 .remove:hover { color: var(--warn); }
 .slider { display: grid; grid-template-columns: 74px 1fr 16px; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }

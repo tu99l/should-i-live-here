@@ -12,7 +12,7 @@ Full plan and times: `docs/PROJECT_BRIEF.md`. Deadline 12:00 PM Sunday, target s
 | 5 | Map UI from `reference/UCLA-Apartment-Map.html`, demo listings load | Teammate | 5:00 PM | done (Tu) |
 | 6 | `group.py`: maximin fair pick, who is least happy and why | Freddy | 8:00 PM | done |
 | 7 | Photon iMessage (gated: only after 2 to 5 work; cut at 7:00 PM if no reply) | Freddy | ~6:00 PM | done: real round-trip on Freddy's iPhone; free-text wishes (near X / listing has X) |
-| 8 | Design pass: palette, fonts, empty and loading states | Teammate | 10:00 PM | doing (Tu): UCLA blue/gold, Nunito + Inter, empty and loading states done; waiting on review |
+| 8 | Design pass: palette, fonts, empty and loading states | Teammate | 10:00 PM | doing (Tu): UCLA blue/gold, Nunito + Inter, empty and loading states done; waiting on review. UI now sends each roommate's place + travel mode, and per-bed prices show |
 | 9 | Devpost draft, thumbnail (5:3), README | Teammate | 11:00 PM | todo |
 | 10 | Sleep in shifts; stability fixes only | Both | 1:00 to 6:00 AM | todo |
 | 11 | Feature freeze, tag the build | Both | 6:00 AM | todo |

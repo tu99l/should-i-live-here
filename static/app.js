@@ -8,6 +8,8 @@ const WALK_METERS_PER_MINUTE = 80; // ~3 mph, so 35 min is about 2.8 km (1.75 mi
 // Must match CRITERIA in app/scoring.py.
 const FACTORS = ["rent", "commute", "laundry", "parking", "bedrooms"];
 const FACTOR_LABELS = { rent: "Rent", commute: "Commute", laundry: "Laundry", parking: "Parking", bedrooms: "Bedrooms" };
+// Must match TravelMode in app/models.py. The words are used in sentences like "31 min by bike".
+const TRAVEL_MODES = { WALK: "walking", BICYCLE: "by bike", TRANSIT: "by transit", DRIVE: "driving" };
 
 // Per-person rent tiers for marker colors (upper bound in dollars, inclusive). Colors match styles.css.
 const TIERS = [
@@ -30,9 +32,9 @@ const PARSE_STEPS = ["Reading the listing…", "Checking each fact against the t
 
 let listings = [];
 let roommates = [
-  { name: "Alex", budget: 1500, weights: { rent: 5, commute: 2, laundry: 3, parking: 1, bedrooms: 2 } },
-  { name: "Sam", budget: 1900, weights: { rent: 2, commute: 5, laundry: 3, parking: 4, bedrooms: 3 } },
-  { name: "Jordan", budget: 1700, weights: { rent: 3, commute: 3, laundry: 5, parking: 2, bedrooms: 3 } },
+  { name: "Alex", budget: 1500, place: "", travel_mode: "WALK", weights: { rent: 5, commute: 2, laundry: 3, parking: 1, bedrooms: 2 } },
+  { name: "Sam", budget: 1900, place: "", travel_mode: "WALK", weights: { rent: 2, commute: 5, laundry: 3, parking: 4, bedrooms: 3 } },
+  { name: "Jordan", budget: 1700, place: "", travel_mode: "WALK", weights: { rent: 3, commute: 3, laundry: 5, parking: 2, bedrooms: 3 } },
 ];
 let markers = {};
 let pickHalo = null;
@@ -75,18 +77,12 @@ const money = n => "$" + Math.round(n).toLocaleString("en-US");
 const label = v => LABELS[v] === undefined ? esc(v) : (LABELS[v] ?? unknown);
 const score = s => (s == null ? "—" : s); // A score can be missing when too many facts are unknown.
 
-// Whole-unit monthly rent, from either the brief's shape (rent_total_monthly) or the old one (price + price_type).
-function totalRent(l) {
-  if (l.rent_total_monthly != null) return l.rent_total_monthly;
-  if (l.price != null && l.price_type === "whole_unit") return l.price;
-  return null;
-}
-
+// Same rule as rent_per_person() in app/scoring.py: split the whole-unit rent, else use the listed
+// per-bed or per-room price as is (each person pays it), else unknown. Never guess.
 function rentPerPerson(l) {
-  const total = totalRent(l);
-  if (total != null) return Math.round(total / Math.max(roommates.length, 1));
-  if (l.price != null && (l.price_type === "per_room" || l.price_type === "per_bed")) return l.price;
-  return null; // Price missing or unclear how it splits: show unknown, never guess.
+  if (l.rent_total_monthly != null) return Math.round(l.rent_total_monthly / Math.max(roommates.length, 1));
+  if (l.rent_per_person_listed != null) return l.rent_per_person_listed;
+  return null;
 }
 
 function tierColor(l) {
@@ -103,10 +99,15 @@ function reasonText(r) {
   const name = (FACTOR_LABELS[r.criterion] || r.criterion).toLowerCase();
   let fact = r.raw_value;
   if (r.criterion === "rent" && typeof fact === "number") fact = money(fact) + "/person";
-  else if (r.criterion === "commute" && typeof fact === "number") fact = `${Math.round(fact)} min`;
+  else if (r.criterion === "commute" && typeof fact === "number") fact = commuteText(fact, r.commute_to, r.travel_mode);
   else if (r.criterion === "bedrooms" && fact != null) fact = `${fact} bd`;
   else fact = LABELS[fact] ?? fact;
   return `${esc(name)}${fact != null ? ` (${esc(fact)})` : ""}, −${r.points_lost} pts`;
+}
+
+// "31 min by bike to Santa Monica Pier". A blank place means the default campus.
+function commuteText(mins, place, mode) {
+  return `${Math.round(mins)} min ${TRAVEL_MODES[mode] || TRAVEL_MODES.WALK} to ${place || CAMPUS.name}`;
 }
 
 // ---------- Cards ----------
@@ -122,7 +123,7 @@ function groceryText(l) {
 
 function cardHtml(l, inPopup) {
   const rpp = rentPerPerson(l);
-  const total = totalRent(l);
+  const total = l.rent_total_monthly;
   const isPick = lastDecision?.pick.listing_id === l.id;
   const commute = [minutes(l.walk_minutes, "walk"), minutes(l.bike_minutes, "bike")].filter(Boolean).join(" / ");
   const rooms = [l.bedrooms != null ? `${l.bedrooms} bd` : null, l.bathrooms != null ? `${l.bathrooms} ba` : null]
@@ -131,7 +132,7 @@ function cardHtml(l, inPopup) {
   let html = `${isPick ? '<div class="tip-pick">★ Fairest pick</div>' : ""}
     <div class="tip-name">${esc(l.title || l.address || "Listing")}</div>
     <div class="tip-price">${rpp == null ? `Rent per person: ${unknown}` : `<b>${money(rpp)}</b>/person`}
-      ${total != null ? ` &middot; ${money(total)}/mo whole unit` : ""}</div>
+      ${total != null ? ` &middot; ${money(total)}/mo whole unit` : rpp != null ? " (listed per bed or room)" : ""}</div>
     <div class="tip-row"><span class="lab">🏠</span>${rooms || unknown}</div>
     <div class="tip-row"><span class="lab">🚶</span>${commute ? esc(commute) + " to campus" : unknown}</div>
     <div class="tip-row"><span class="lab">🧺</span>Laundry: ${label(l.laundry)}</div>
@@ -148,7 +149,11 @@ function cardHtml(l, inPopup) {
       ${ranked.per_roommate.map(p => {
         const known = p.breakdown.filter(b => !b.unknown);
         const worst = known.length ? known.reduce((a, b) => (b.points_lost > a.points_lost ? b : a)) : null;
-        return `<tr><td>${esc(p.roommate)}</td><td class="num">${score(p.score)}</td>
+        // Show each roommate's own commute when it isn't the default walk to campus.
+        const c = p.breakdown.find(b => b.criterion === "commute");
+        const own = (p.commute_to || (p.travel_mode && p.travel_mode !== "WALK")) && c && !c.unknown && typeof c.raw_value === "number"
+          ? `<div class="tip-sub">${esc(commuteText(c.raw_value, p.commute_to, p.travel_mode))}</div>` : "";
+        return `<tr><td>${esc(p.roommate)}${own}</td><td class="num">${score(p.score)}</td>
           <td>${worst && worst.points_lost > 0 ? `${esc(FACTOR_LABELS[worst.factor] || worst.factor)} (−${worst.points_lost})` : "—"}</td></tr>`;
       }).join("")}
       </table>
@@ -204,6 +209,14 @@ function renderRoommates() {
         <span class="budget">max $<input type="number" value="${r.budget}" min="1" step="50" aria-label="${esc(r.name)} max rent per month" onchange="roommates[${i}].budget=+this.value"></span>
         ${roommates.length > 1 ? `<button class="remove" title="Remove ${esc(r.name)}" aria-label="Remove ${esc(r.name)}" onclick="removeRoommate(${i})">×</button>` : ""}
       </div>
+      <div class="roommate-commute">
+        <input type="text" value="${esc(r.place || "")}" placeholder="Going to: ${CAMPUS.name} (or type a place)"
+               aria-label="Where ${esc(r.name)} needs to get to" title="Type a specific place, e.g. Santa Monica Pier, Santa Monica, CA"
+               onchange="roommates[${i}].place=this.value.trim()">
+        <select aria-label="How ${esc(r.name)} gets there" onchange="roommates[${i}].travel_mode=this.value">
+          ${Object.entries(TRAVEL_MODES).map(([m, w]) => `<option value="${m}"${(r.travel_mode || "WALK") === m ? " selected" : ""}>${w[0].toUpperCase() + w.slice(1)}</option>`).join("")}
+        </select>
+      </div>
       ${FACTORS.map(f => `
         <div class="slider"><span>${FACTOR_LABELS[f]}</span>
           <input type="range" min="0" max="5" value="${r.weights[f]}" aria-label="${esc(r.name)} ${f} weight"
@@ -226,7 +239,7 @@ function roommatesChanged() {
 }
 
 function addRoommate() {
-  roommates.push({ name: "Roommate " + (roommates.length + 1), budget: 1500,
+  roommates.push({ name: "Roommate " + (roommates.length + 1), budget: 1500, place: "", travel_mode: "WALK",
                    weights: { rent: 3, commute: 3, laundry: 3, parking: 3, bedrooms: 3 } });
   roommatesChanged();
 }
@@ -245,7 +258,8 @@ async function runDecision() {
   try {
     const res = await fetch("/api/decide", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ listings, roommates }),
+      // A blank place is sent as null, which means the default campus.
+      body: JSON.stringify({ listings, roommates: roommates.map(r => ({ ...r, place: r.place || null })) }),
     });
     const d = await res.json();
     if (!res.ok) { out.innerHTML = `<div class="status error">Couldn't decide: ${esc(d.detail)}</div>`; return; }
