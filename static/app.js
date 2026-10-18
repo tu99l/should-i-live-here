@@ -479,7 +479,8 @@ function enterApp() { location.hash = "app"; }
 
 window.addEventListener("hashchange", () => showScreen());
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !welcomeEl.hidden) enterApp();
+  // Not while typing in the welcome form: Escape there shouldn't throw away what they're writing.
+  if (e.key === "Escape" && !welcomeEl.hidden && !e.target.closest("input, textarea, select")) enterApp();
 });
 showScreen(false);
 
