@@ -147,7 +147,7 @@ def test_first_text_gets_a_greeting_and_marks_them_texting():
     fake = FakePhoton([incoming("pho_msg_5", "Hi, it's Freddy! Let's find our apartment."),
                        incoming("pho_msg_6", "laundry 5", created="2026-10-18T02:01:00Z")])
     photon_bot.process(bot(fake), fresh_state(), log=quiet)
-    assert fake.sent[0][1]["content"]["text"].startswith("Hi Freddy! I'm the apartment bot for Freddy & Sam.")
+    assert fake.sent[0][1]["content"]["text"].startswith("Hi Freddy! I'm Common Ground, the apartment bot for Freddy & Sam.")
     assert fake.sent[1][1]["content"]["text"].startswith("Got it, Freddy")  # Second text: not greeted again.
     assert group_store.read().find("Freddy").connected is True
 
@@ -193,7 +193,7 @@ def test_new_person_from_the_page_is_known_to_the_bot_right_away():
     photon_bot.invite_roommate(bot(FakePhoton()), "Tu", "4245550188")
     fake = FakePhoton([incoming("pho_msg_7", "hello", handle="+14245550188")])
     photon_bot.process(bot(fake), fresh_state(), log=quiet)
-    assert fake.sent[0][1]["content"]["text"].startswith("Hi Tu! I'm the apartment bot for Freddy, Sam & Tu.")
+    assert fake.sent[0][1]["content"]["text"].startswith("Hi Tu! I'm Common Ground, the apartment bot for Freddy, Sam & Tu.")
 
 
 def test_the_page_never_gets_full_phone_numbers():

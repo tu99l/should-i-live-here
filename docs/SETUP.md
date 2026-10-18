@@ -1,4 +1,4 @@
-# Setup: run Should I Live Here? yourself
+# Setup: run Common Ground yourself
 
 Back to the [README](../README.md).
 

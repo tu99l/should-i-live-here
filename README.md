@@ -11,7 +11,7 @@ Delete these notes when you're done (or leave them: GitHub doesn't show them).
 ================================================================================================
 -->
 
-# Should I Live Here?
+# Common Ground
 
 **Find the apartment that's fairest for your whole group, not just the person who found it.**
 

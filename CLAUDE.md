@@ -1,4 +1,4 @@
-# Should I Live Here? (working name)
+# Common Ground (formerly "Should I Live Here?")
 
 LA Hacks AI Hackathon 2026 project. Track: Applied Intelligence. Two teammates, 24 hours, both new to hackathons.
 

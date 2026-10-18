@@ -387,7 +387,7 @@ def greeting(name: str, group: group_store.Group) -> str:
     """The first text someone gets: who we are, and what to tell us (only things we can actually check)."""
     names = [p.name for p in group.people]
     group_names = ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 1 else names[0]
-    return (f"Hi {name}! I'm the apartment bot for {group_names}. I'll find the place that's fairest for everyone.\n"
+    return (f"Hi {name}! I'm Common Ground, the apartment bot for {group_names}. I'll find the place that's fairest for everyone.\n"
             "Tell me in your own words, as much or as little as you like:\n"
             "• Your max rent per month\n"
             "• Own bedroom? Own bathroom?\n"

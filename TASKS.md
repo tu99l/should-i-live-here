@@ -58,7 +58,7 @@ a 100-text flood, Photon failures (no double texts, failed replies retried), no 
 
 **Optional prize: MLH "Best Domain Name from GoDaddy Registry"** (from the brief; nothing done yet; whoever has time):
 - [ ] Ask MLH (their table or the event Discord) for the free GoDaddy Registry domain code and the rules.
-- [ ] Register a creative name (ideas, availability not checked: shouldilivehere, fairestpick, roomiefair, fairsplit).
+- [ ] Register a creative name (ideas, availability not checked: commonground, ourcommonground, findcommonground, shouldilivehere, fairestpick, roomiefair, fairsplit).
 - [ ] Our app runs on a laptop, so forward the domain to the GitHub page (https://github.com/tu99l/should-i-live-here)
       or the demo video, using the registrar's forwarding setting (no code).
 - [ ] On Devpost, opt into the challenge and list the domain; add it to the README's Team section.

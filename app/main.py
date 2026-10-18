@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 NO_LISTINGS = "No places on the map yet. Search near your place, or paste a listing in step 4."
 WISHES_DOWN = ("Couldn't reach Gemini to read that just now. Short texts like \"laundry 5, rent 3\" still work, "
                "or try again in a minute.")
-app = FastAPI(title="Should I Live Here?")
+app = FastAPI(title="Common Ground")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
