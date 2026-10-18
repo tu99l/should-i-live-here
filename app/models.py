@@ -84,6 +84,9 @@ class Roommate(BaseModel):
     place: Optional[str] = Field(None, max_length=200)
     travel_mode: TravelMode = "WALK"
     wants: list[Want] = Field(default_factory=list, max_length=8)
+    # Specific asks: "in-unit laundry" means shared laundry doesn't count for them,
+    # "free parking" means paid parking doesn't count. See scoring.STRICT_SCORES.
+    strict: list[Literal["in_unit_laundry", "included_parking"]] = Field(default_factory=list)
 
 
 class ParseRequest(BaseModel):

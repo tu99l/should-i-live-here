@@ -71,6 +71,10 @@ Roommates can now ask for anything in their own words, by iMessage or (optionall
 - Send `wants` on each roommate in `/api/decide`; nothing else changes. Breakdown rows for wishes have
   `criterion` like `"near: gym"` or `"has: gas included"`, plus `kind`, `place_name` (near) or `evidence`
   (the listing's exact words, for features). Unknown wishes are excluded and flagged like other facts.
+- Specific asks count strictly: "in-unit laundry" means shared laundry scores 0 for that roommate, "free parking"
+  means paid parking scores 0 (roommate field `strict`). Saying you want something now weighs 4 (must 5, important 4.5),
+  above the starting 3, so a text always moves things. Demo (tested): Freddy texts "would like in unit laundry"
+  and the pick moves from 424 Landfair (shared laundry) to 1615 Greenfield (in-unit).
 - Demo listings now have `source_text` (their notes from the old map), so "pets allowed", "water included",
   "A/C" get real yes/no answers with quotes. Gas is unknown everywhere: no listing mentions it.
 - Run the iMessage bot: `.venv/bin/python -m app.photon_bot`. Needs `PHOTON_API_KEY` and `PHOTON_PROJECT_ID`

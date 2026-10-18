@@ -151,3 +151,19 @@ def test_a_wish_can_change_the_ranking():
     facts = {"near": [{"walk_minutes": 3}], "far": [{"walk_minutes": 30}]}
     with_gym = [score_listing(l, r, 2, want_facts=facts[l.id])["score"] for l in (near_gym, far_gym)]
     assert with_gym[0] > with_gym[1]
+
+
+def test_asking_for_in_unit_laundry_gives_shared_no_credit():
+    plain = Roommate(name="A", budget=2000, weights=only(laundry=5))
+    picky = Roommate(name="B", budget=2000, weights=only(laundry=5), strict=["in_unit_laundry"])
+    shared = make_listing(laundry="shared")
+    assert score_listing(shared, plain, 2)["score"] == 40
+    assert score_listing(shared, picky, 2)["score"] == 0
+    assert score_listing(make_listing(laundry="in_unit"), picky, 2)["score"] == 100
+    assert score_listing(make_listing(laundry="unknown"), picky, 2)["unknown"] == ["laundry"]  # Still never guessed.
+
+
+def test_asking_for_free_parking_gives_paid_no_credit():
+    picky = Roommate(name="B", budget=2000, weights=only(parking=5), strict=["included_parking"])
+    assert score_listing(make_listing(parking="paid"), picky, 2)["score"] == 0
+    assert score_listing(make_listing(parking="included"), picky, 2)["score"] == 100
