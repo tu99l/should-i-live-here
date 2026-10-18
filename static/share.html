@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Our Fairest Pick</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nunito:wght@800&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/share.css">
+</head>
+<body>
+  <header class="sh-head">
+    <h1>Should I Live <span>Here?</span></h1>
+    <p id="who">Loading your group…</p>
+  </header>
+  <main>
+    <section id="pick" class="sh-pick" aria-live="polite"><div class="sh-muted">Loading the pick…</div></section>
+    <div id="map" role="region" aria-label="Map of the places"></div>
+    <div class="sh-legend" id="legend"></div>
+    <section class="sh-card">
+      <h2>Everyone at the pick</h2>
+      <div id="scores"></div>
+    </section>
+    <section class="sh-card">
+      <h2>All places, fairest first</h2>
+      <p class="sh-muted sh-small">"Lowest" is the least happy person's score (out of 100). Tap a row to find it on the map.</p>
+      <div class="sh-table"><table id="ranking"></table></div>
+    </section>
+    <section class="sh-card">
+      <h2>Who wants what</h2>
+      <div id="people"></div>
+    </section>
+    <footer class="sh-muted sh-small">View only. This page updates by itself when someone texts the bot.
+      <span id="updated"></span></footer>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/share.js"></script>
+</body>
+</html>

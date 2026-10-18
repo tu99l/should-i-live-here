@@ -41,6 +41,9 @@ class Person(BaseModel):
     line: Optional[str] = None        # The Photon number this person texts.
     connected: bool = False           # Has texted the bot at least once.
     last_text: Optional[str] = None   # Their most recent wish text, shown on the card.
+    # Their conversation with the bot (from their first text), so the bot can text them later.
+    space_id: Optional[str] = None
+    agent_id: Optional[str] = None
     roommate: Roommate
 
 
@@ -50,6 +53,7 @@ class Group(BaseModel):
     size: int = Field(3, ge=1, le=10)
     people: list[Person] = Field(default_factory=list)
     listings: Optional[list[Listing]] = None
+    last_pick: Optional[str] = None  # The pick the group was last told about (the bot texts when it changes).
 
     def find(self, name: str) -> Optional[Person]:
         key = " ".join(name.split()).casefold()

@@ -7,19 +7,29 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from . import extract, group, group_store, maps_lookup, photon_bot, rentcast, wishes  # noqa: E402  (imports read .env, so load it first)
+from . import extract, group, group_store, maps_lookup, photon_bot, rentcast, share, wishes  # noqa: E402  (imports read .env, so load it first)
 from .models import DecideRequest, Listing, ParseRequest, TravelMode  # noqa: E402
 from .wishes import Wishes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Should I Live Here?")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+
+
+@app.middleware("http")
+async def only_share_page_from_outside(request, call_next):
+    """Requests through the share tunnel may only see the view-only results (share.py). Everything else,
+    including anything that costs API calls or changes the group, answers 404 to them."""
+    if share.from_outside(request.headers.get("host", ""), request.headers) and \
+            not share.allowed_from_outside(request.method, request.url.path):
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -366,3 +376,52 @@ def decide_for_group() -> dict:
     if not g.people:
         raise HTTPException(status_code=400, detail="Nobody in the group yet.")
     return photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)
+
+
+# ---------- View-only results link for roommates (share.py, scripts/share_link.py) ----------
+
+_share_cache: dict = {}  # {group version: decision}, so phones refreshing don't redo the work.
+
+
+def _check_code(code: str) -> None:
+    if not secrets_equal(code, share.code()):
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def secrets_equal(a: str, b: str) -> bool:
+    import hmac
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
+@app.get("/share/{code}")
+def share_page(code: str):
+    _check_code(code)
+    return FileResponse(ROOT / "static" / "share.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/share/{code}")
+def share_data(code: str) -> dict:
+    """Everything the view-only page shows: the group (no phone numbers), the listings, the fair pick."""
+    _check_code(code)
+    g = group_store.read()
+    people = [{"name": p.name, "me": p.me, "connected": p.connected, "invited": bool(p.line),
+               "last_text": p.last_text, "roommate": p.roommate.model_dump(exclude={"place"}) | {"place": p.roommate.place}}
+              for p in g.people]
+    decision = None
+    if g.people:
+        if g.version not in _share_cache:
+            _share_cache.clear()
+            _share_cache[g.version] = photon_bot.run_decision(g.roommates(), g.current_listings(), g.place, g.size)
+        decision = _share_cache[g.version]
+    listings = [l.model_dump(include={"id", "title", "address", "lat", "lng", "rent_total_monthly", "listed_price",
+                                      "rent_per_person_listed", "bedrooms", "bathrooms", "laundry", "parking",
+                                      "walk_minutes", "bike_minutes", "red_flags", "price_check", "property_type",
+                                      "square_feet", "source"}) for l in g.current_listings()]
+    return {"version": g.version, "place": g.place, "size": g.size, "people": people,
+            "listings": listings, "decision": decision}
+
+
+@app.get("/api/share")
+def share_status() -> dict:
+    """For this laptop's page: the link to send roommates (None while no tunnel is running)."""
+    return {"link": share.link()}

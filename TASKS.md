@@ -110,6 +110,16 @@ Goal: nobody touches the Photon dashboard or a config file. Our shared iMessage 
 - [x] Teammate: create `CLAUDE.local.md` with "I am <name> (UI and story)."
 - [ ] The "How it works" diagram in the brief did not export; view it in the Claude Doc.
 
+## View-only results link for roommates — done by Freddy (Tu: restyle `static/share.css` freely)
+- Run the app, then `.venv/bin/python scripts/share_link.py` (needs `brew install cloudflared`). It prints a link like
+  `https://<random>.trycloudflare.com/share/<secret>` and the page shows it under the pick ("Share with your group").
+- Roommates open it on their phones: the pick, the map (tap dots), everyone's scores at the pick, all places ranked,
+  who wants what. View only; refreshes by itself. Works only while the laptop runs the app and the script.
+- Through the tunnel, only the share page answers; everything else (searches, invites, edits) is 404 (`app/share.py`).
+- The bot adds the link to "pick" replies, and when someone's text changes the pick it texts everyone else who has
+  texted the bot: "Update: Sam changed what they want, and the fairest pick is now X. See the map: <link>".
+- For the demo: start `share_link.py` before judging; the link changes each time it starts (the secret part stays).
+
 ## Redesign: one group for the page and the bot — done by Freddy (Tu: pull, then restyle freely)
 Problem: the page and the iMessage bot each had their own group (page: Alex/Sam/Jordan in the browser with 0–5 grids;
 bot: roommates.local.json), so a roommate's texts never changed their card.

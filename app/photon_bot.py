@@ -26,7 +26,7 @@ from typing import Optional
 
 import httpx
 
-from . import group, group_store, maps_lookup, wishes
+from . import group, group_store, maps_lookup, share, wishes
 from .cache import CACHE_DIR
 from .models import Listing, Roommate
 
@@ -167,8 +167,48 @@ def run_decision(roommates: list[Roommate], listings: list[Listing], place: str 
 
 
 def current_pick(name: str) -> str:
+    """The pick as text for one person, plus the map link when one is running. Notes pick changes (see changed_pick)."""
     g = group_store.read()
-    return pick_summary(run_decision(g.roommates(), g.current_listings(), g.place, g.size), name)
+    decision = run_decision(g.roommates(), g.current_listings(), g.place, g.size)
+    _pick_seen[name] = decision["pick"]
+    text = pick_summary(decision, name)
+    url = share.link()
+    return text + (f"\nSee the map and everyone's scores: {url}" if url else "")
+
+
+_pick_seen: dict[str, dict] = {}  # name -> the pick their latest reply showed.
+
+
+def changed_pick(name: str) -> Optional[dict]:
+    """If the pick shown to `name` differs from the one the group was last told about, record it and return it."""
+    pick = _pick_seen.pop(name, None)
+    if not pick:
+        return None
+    with group_store.editing() as g:
+        if g.last_pick == pick["listing_id"]:
+            return None
+        first = g.last_pick is None
+        g.last_pick = pick["listing_id"]
+    return None if first else pick
+
+
+def tell_group(photon: "Photon", changed_by: str, pick: dict, log=print) -> int:
+    """Text everyone else who has texted the bot that the pick changed. Returns how many were told."""
+    g = group_store.read()
+    url = share.link()
+    told = 0
+    for p in g.people:
+        if p.name == changed_by or not (p.space_id and p.agent_id):
+            continue
+        text = (f"Update: {changed_by} changed what they want, and the fairest pick is now {pick['title']}."
+                + (f"\nSee the map: {url}" if url else "\nText \"pick\" for the details."))
+        try:
+            photon.send_to(p.space_id, p.agent_id, text, key=f"silh-pick:{g.version}:{p.name}")
+            told += 1
+            log(f"-> {p.name} (update): {text}")
+        except httpx.HTTPError as e:
+            log(f"!! couldn't tell {p.name}: {e!r}")
+    return told
 
 
 def handle_text(name: str, text: str) -> str:
@@ -226,9 +266,13 @@ class Photon:
 
     def send_text(self, incoming: dict, text: str) -> None:
         """Reply in the same conversation. Same idempotency key on retry = never sent twice."""
-        body = {"spaceId": incoming["space"]["id"], "senderId": incoming["receivedBy"]["id"],
+        self.send_to(incoming["space"]["id"], incoming["receivedBy"]["id"], text, key=f"silh-reply:{incoming['id']}")
+
+    def send_to(self, space_id: str, agent_id: str, text: str, key: str) -> None:
+        """Text someone in their conversation with the bot (allowed once they've texted the line)."""
+        body = {"spaceId": space_id, "senderId": agent_id,
                 "content": {"type": "text", "format": "plain", "text": text}}
-        headers = {"Idempotency-Key": f"silh-reply:{incoming['id']}"}
+        headers = {"Idempotency-Key": key}
         for attempt in range(2):
             try:
                 r = self.http.post(f"/projects/{self.project}/messages", json=body, headers=headers)
@@ -321,7 +365,9 @@ def process(photon: Photon, state: dict, log=print) -> int:
         elif not group.find(name).connected:
             # Their first text (usually the pre-filled "Hi, it's Sam"): say hello and ask what they want.
             with group_store.editing() as g:
-                g.find(name).connected = True
+                person = g.find(name)
+                person.connected = True
+                person.space_id, person.agent_id = m["space"]["id"], m["receivedBy"]["id"]
             reply = greeting(name, group)
             if not wishes.quick_parse(text) and len(text.split()) > 6:  # They already said what they want.
                 try:
@@ -338,6 +384,14 @@ def process(photon: Photon, state: dict, log=print) -> int:
         photon.send_text(m, reply)
         log(f"-> {reply}\n")
         answered += 1
+        if name:
+            person = group_store.read().find(name)
+            if person and not person.space_id:  # Texted before we kept conversations: remember it now.
+                with group_store.editing() as g:
+                    g.find(name).space_id, g.find(name).agent_id = m["space"]["id"], m["receivedBy"]["id"]
+            pick = changed_pick(name)
+            if pick:
+                tell_group(photon, name, pick, log)
     return answered
 
 

@@ -264,7 +264,28 @@
   el("loadDemo").addEventListener("click", loadDemo);
   el("startOver").addEventListener("click", startOver);
 
+  // "Share with your group": the view-only link (works while scripts/share_link.py is running).
+  async function loadShare() {
+    let link = null;
+    try { link = (await api("GET", "/api/share")).link; } catch { return; }
+    const box = el("shareBox");
+    if (box.dataset.link === String(link)) return;
+    box.dataset.link = String(link);
+    box.innerHTML = link
+      ? `<b>Share with your group</b> (view only: the map, the pick and everyone's scores). The bot texts this link too.
+         <div class="share-link"><input id="shareLink" readonly value="${h(link)}" aria-label="Link to the results">
+         <button type="button" class="secondary" id="copyShare">Copy</button></div>`
+      : `<b>Share with your group:</b> to send roommates a link to this map, run
+         <code>.venv/bin/python scripts/share_link.py</code> in a terminal on this laptop.`;
+    el("copyShare")?.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(link); el("copyShare").textContent = "Copied"; }
+      catch { el("shareLink").select(); }
+    });
+  }
+
   loadGroup();
+  loadShare();
+  setInterval(() => { if (!document.hidden) loadShare(); }, 10000);
   // Someone texting the bot changes the group: pick that up and update the pick.
   setInterval(() => { if (!document.hidden && !busy) loadGroup({ rerunPick: !!lastDecision }); }, POLL_MS);
 })();
