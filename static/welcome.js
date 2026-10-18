@@ -51,5 +51,4 @@
   }
 
   el("welcomeForm").addEventListener("submit", start);
-  el("welcomeSkip").addEventListener("click", e => { e.preventDefault(); enterApp(); });
 })();
