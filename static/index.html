@@ -6,7 +6,7 @@
   <title>Should I Live Here?</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nunito:wght@800&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/invite.css">
@@ -15,8 +15,8 @@
   <!-- Welcome screen: covers the app until "Start". Add #app to the URL to skip it. -->
   <div id="welcome" class="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
     <div class="welcome-inner">
-      <span class="neon-cn welcome-cn" lang="zh-Hans" aria-hidden="true">我该住这里吗？</span>
-      <h1 id="welcomeTitle" class="welcome-title">Should I Live Here?</h1>
+      <span class="welcome-kicker">For UCLA roommates</span>
+      <h1 id="welcomeTitle" class="welcome-title">Should I Live <span>Here?</span></h1>
       <p class="welcome-pitch">Finding a place with roommates means someone always gives something up.
         We find the apartment that's fairest for everyone, using real facts, and show the math.</p>
       <ol class="welcome-steps">
@@ -28,21 +28,21 @@
       <p class="welcome-foot">12 real listings near UCLA are loaded and ready. Built at LA Hacks 2026.</p>
     </div>
     <svg class="skyline" viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <!-- Neon Shanghai skyline: towers, the Oriental Pearl Tower and the "bottle opener" -->
+      <!-- Westwood: Royce Hall's twin towers in the middle, palm trees and low buildings around it -->
       <g class="sky-back">
-        <path d="M0 220V150h40v-30h30v50h35V110h45v110zM160 220V90h30V60h20v30h25v130zM250 220v-70h55v-40h40v110zM980 220V100h40v-20h30v140zM1060 220v-90h50v40h40v-60h50v110z"/>
+        <path d="M0 220v-60h80v-25h60v85zM150 220v-45h90v45zM960 220v-50h70v-20h60v70zM1100 220v-75h100v75z"/>
       </g>
       <g class="sky-front">
-        <!-- Oriental Pearl Tower -->
-        <path d="M455 220l18-95M505 220l-18-95M480 220V125M480 52V8"/>
-        <circle cx="480" cy="125" r="24"/><circle cx="480" cy="62" r="15"/><circle cx="480" cy="30" r="6"/>
-        <!-- Shanghai Tower (twisting) -->
-        <path d="M640 220c-6-80 4-150 22-205c14 55 20 125 16 205z"/>
-        <!-- World Financial Center (bottle opener) -->
-        <path d="M740 220V40l30-12l30 12v180z"/><path d="M757 60h26l-4 18h-18z"/>
-        <!-- Jin Mao -->
-        <path d="M560 220V80l14-30l14 30v140zM574 50V25"/>
-        <path d="M330 220v-80h50v80M820 220v-110h60v110M890 220v-60h45v60"/>
+        <!-- Royce Hall: main hall, entrance arches, two towers with pointed roofs -->
+        <path d="M470 220v-70h260v70z"/>
+        <path d="M520 220V95h40v125zM640 220V95h40v125z"/>
+        <path d="M512 97l28-40l28 40zM632 97l28-40l28 40z"/>
+        <path class="gold" d="M577 220v-30a23 23 0 0 1 46 0v30z"/>
+        <rect class="gold" x="534" y="120" width="12" height="20" rx="6"/><rect class="gold" x="654" y="120" width="12" height="20" rx="6"/>
+        <!-- Palm trees -->
+        <path d="M330 220l6-120h5l6 120zM338 100c-30-6-48 6-58 18c18-10 36-12 58-12zM338 100c28-8 48 2 60 14c-20-8-38-8-60-8zM338 100c-8-22-26-32-40-34c14 10 26 20 34 36zM338 100c10-20 28-28 44-28c-16 8-28 18-38 32z"/>
+        <path d="M860 220l6-140h5l6 140zM868 80c-30-6-48 6-58 18c18-10 36-12 58-12zM868 80c28-8 48 2 60 14c-20-8-38-8-60-8zM868 80c-8-22-26-32-40-34c14 10 26 20 34 36zM868 80c10-20 28-28 44-28c-16 8-28 18-38 32z"/>
+        <path d="M250 220v-55h60v55zM760 220v-40h70v40zM900 220v-30h50v30z"/>
       </g>
     </svg>
   </div>
@@ -50,7 +50,6 @@
   <div id="map"></div>
   <aside>
     <header class="brand">
-      <span class="neon-cn" lang="zh-Hans" aria-hidden="true">我该住这里吗？</span>
       <h1>Should I Live Here?</h1>
       <p>Every roommate says what matters. We find the place that's fairest for the whole group, and show the math.</p>
     </header>

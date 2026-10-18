@@ -15,12 +15,12 @@ const TRAVEL_MODES = { WALK: "walking", BICYCLE: "by bike", TRANSIT: "by transit
 
 // Per-person rent tiers for marker colors (upper bound in dollars, inclusive). Colors match styles.css.
 const TIERS = [
-  { max: 1300, color: "#3dffa8", label: "≤ $1,300" },
-  { max: 1550, color: "#ffb627", label: "$1,301–$1,550" },
-  { max: Infinity, color: "#ff3b5c", label: "$1,551+" },
+  { max: 1300, color: "#2e9e5b", label: "≤ $1,300" },
+  { max: 1550, color: "#e8a23b", label: "$1,301–$1,550" },
+  { max: Infinity, color: "#d0573f", label: "$1,551+" },
 ];
-const UNKNOWN_COLOR = "#7d7a99";
-const PICK_RING = "#ffffff", PICK_GLOW = "#ffb627", MARKER_EDGE = "#07050f", WALK_CIRCLE = "#19e6ff";
+const UNKNOWN_COLOR = "#8a94a6";
+const PICK_RING = "#1e3a5f", PICK_GLOW = "#ffc72c", MARKER_EDGE = "#ffffff", WALK_CIRCLE = "#2774ae";
 
 // Readable labels for field values (old and current names).
 const LABELS = {
@@ -51,7 +51,7 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 L.circle(CAMPUS.latlng, {
   radius: WALK_CIRCLE_MINUTES * WALK_METERS_PER_MINUTE,
-  color: WALK_CIRCLE, weight: 1.5, dashArray: "6 6", fill: true, fillColor: WALK_CIRCLE, fillOpacity: 0.06,
+  color: WALK_CIRCLE, weight: 1.5, dashArray: "6 6", fill: true, fillColor: WALK_CIRCLE, fillOpacity: 0.05,
   interactive: false,
 }).addTo(map);
 
@@ -177,8 +177,8 @@ function drawListings() {
     const isPick = lastDecision?.pick.listing_id === l.id;
     const color = tierColor(l);
     if (isPick) {
-      // Neon glow behind the fairest pick.
-      pickHalo = L.circleMarker([l.lat, l.lng], { radius: 22, stroke: false, fillColor: PICK_GLOW, fillOpacity: 0.4, interactive: false }).addTo(map);
+      // Gold glow behind the fairest pick.
+      pickHalo = L.circleMarker([l.lat, l.lng], { radius: 20, stroke: false, fillColor: PICK_GLOW, fillOpacity: 0.45, interactive: false }).addTo(map);
     }
     const m = L.circleMarker([l.lat, l.lng], {
       radius: isPick ? 12 : 9, color: isPick ? PICK_RING : MARKER_EDGE, weight: isPick ? 3 : 2,
